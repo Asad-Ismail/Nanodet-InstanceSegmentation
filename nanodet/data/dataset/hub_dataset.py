@@ -107,7 +107,7 @@ class HubDataset(CocoDataset):
                     continue
                 coco_box = [max(xmin, 0), max(ymin, 0), min(w, width), min(h, height)]
                 ann = {
-                    "image_id": idx + 1,
+                    "image_id": i + 1,
                     "bbox": coco_box,
                     "category_id": 1,
                     "iscrowd": 0,

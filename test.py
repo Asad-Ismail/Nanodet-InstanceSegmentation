@@ -38,3 +38,5 @@ print("Setting up data...")
 train_dataset = build_dataset(cfg.data.train, "train",class_names=cfg.class_names)
 #val_dataset = build_dataset(cfg.data.val, "test")
 
+for batch in train_dataset:
+    print(batch)
