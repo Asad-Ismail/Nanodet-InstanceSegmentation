@@ -18,6 +18,8 @@ from nanodet.util import (
     mkdir,
 )
 
+from nanodet.model.arch import build_model
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="train config file path")
@@ -28,6 +30,8 @@ def parse_args():
 
 args = parse_args()
 load_config(cfg, args.config)
+
+model = build_model(cfg.model)
 
 if cfg.model.arch.head.num_classes != len(cfg.class_names):
     raise ValueError(
