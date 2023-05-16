@@ -10,6 +10,7 @@ from pycocotools.coco import COCO
 
 import deeplake as hub
 import cv2
+import numpy as np
 from tqdm import tqdm
 
 from .coco import CocoDataset
@@ -39,6 +40,8 @@ class HubDataset(CocoDataset):
         self.class_names = class_names
         src="hub://aismail2/cucumber_OD"
         self.ds = hub.load(src)
+        self.img_sz=kwargs["input_size"][0]
+        self.seg_sz=64
         super(HubDataset, self).__init__(**kwargs)
 
     def hub_to_coco(self, ann_path):
