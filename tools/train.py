@@ -68,8 +68,8 @@ def main(args):
         pl.seed_everything(args.seed)
 
     logger.info("Setting up data...")
-    train_dataset = build_dataset(cfg.data.train, "train")
-    val_dataset = build_dataset(cfg.data.val, "test")
+    train_dataset = build_dataset(cfg.data.train, "train",class_names=cfg.class_names)
+    val_dataset = build_dataset(cfg.data.val, "test",class_names=cfg.class_names)
 
     evaluator = build_evaluator(cfg.evaluator, val_dataset)
 

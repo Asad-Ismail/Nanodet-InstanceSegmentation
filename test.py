@@ -32,6 +32,8 @@ args = parse_args()
 load_config(cfg, args.config)
 
 model = build_model(cfg.model)
+print(model)
+exit()
 
 if cfg.model.arch.head.num_classes != len(cfg.class_names):
     raise ValueError(
