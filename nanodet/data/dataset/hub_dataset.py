@@ -106,7 +106,7 @@ class HubDataset(CocoDataset):
                 ann = {
                     "image_id": idx + 1,
                     "bbox": coco_box,
-                    "category_id": cat_id,
+                    "category_id": 1,
                     "iscrowd": 0,
                     "id": ann_id,
                     "area": coco_box[2] * coco_box[3],
