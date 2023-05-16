@@ -43,7 +43,7 @@ class HubDataset(CocoDataset):
         self.img_sz=kwargs["input_size"][0]
         self.seg_sz=64
         self.save_imgs=True
-        self.img_path=img_path
+        self.img_path=kwargs["img_path"]
         super(HubDataset, self).__init__(**kwargs)
 
     def hub_to_coco(self, ann_path):
