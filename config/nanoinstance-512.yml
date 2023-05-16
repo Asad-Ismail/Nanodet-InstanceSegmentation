@@ -63,7 +63,7 @@ model:
 data:
   train:
     name: hub
-    img_path: coco/train2017
+    img_path: /home/ec2-user/SageMaker/Nanodet-InstanceSegmentation/data/cucumbers
     ann_path: coco/annotations/instances_train2017.json
     input_size: [512,512] #[w,h]
     keep_ratio: False
