@@ -18,6 +18,7 @@ import warnings
 from .coco import CocoDataset
 from .xml_dataset import XMLDataset
 from .yolo import YoloDataset
+from .hub_dataset import HubDataset
 
 
 def build_dataset(cfg, mode):
@@ -42,5 +43,7 @@ def build_dataset(cfg, mode):
         return YoloDataset(mode=mode, **dataset_cfg)
     elif name == "XMLDataset":
         return XMLDataset(mode=mode, **dataset_cfg)
+    elif name =="hub":
+        return HubDataset(mode=mode, **dataset_cfg)
     else:
         raise NotImplementedError("Unknown dataset type!")
