@@ -5,7 +5,7 @@
 #           AP_small = 0.083
 #               AP_m = 0.278
 #               AP_l = 0.451
-save_dir: workspace/nanodet-plus-m_320
+save_dir: workspace/nanodet-plus-cucumber_512
 model:
   weight_averager:
     name: ExpMovingAverager
@@ -81,7 +81,7 @@ data:
       normalize: [[103.53, 116.28, 123.675], [57.375, 57.12, 58.395]]
   val:
     name: hub
-    img_path: coco/val2017
+    img_path: /home/ec2-user/SageMaker/Nanodet-InstanceSegmentation/data/cucumbers
     ann_path: coco/annotations/instances_val2017.json
     input_size: [512,512] #[w,h]
     keep_ratio: False
