@@ -53,7 +53,7 @@ model:
     # Auxiliary head, only use in training time.
     aux_head:
       name: SimpleConvHead
-      num_classes: 80
+      num_classes: 1
       input_channel: 192
       feat_channels: 192
       stacked_convs: 4
@@ -89,8 +89,8 @@ data:
       normalize: [[103.53, 116.28, 123.675], [57.375, 57.12, 58.395]]
 device:
   gpu_ids: [0] # Set like [0, 1, 2, 3] if you have multi-GPUs
-  workers_per_gpu: 10
-  batchsize_per_gpu: 96
+  workers_per_gpu: 1
+  batchsize_per_gpu: 8
   precision: 32 # set to 16 to use AMP training
 schedule:
 #  resume:
