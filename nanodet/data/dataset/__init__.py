@@ -21,9 +21,12 @@ from .yolo import YoloDataset
 from .hub_dataset import HubDataset
 
 
-def build_dataset(cfg, mode):
+def build_dataset(cfg, mode,class_names=None):
     dataset_cfg = copy.deepcopy(cfg)
     name = dataset_cfg.pop("name")
+    for k,v in dataset_cfg.items():
+        print(k)
+        print(v)
     if name == "coco":
         warnings.warn(
             "Dataset name coco has been deprecated. Please use CocoDataset instead."
@@ -35,7 +38,7 @@ def build_dataset(cfg, mode):
         warnings.warn(
             "Dataset name xml_dataset has been deprecated. "
             "Please use XMLDataset instead."
-        )
+        ) 
         return XMLDataset(mode=mode, **dataset_cfg)
     elif name == "CocoDataset":
         return CocoDataset(mode=mode, **dataset_cfg)
@@ -44,6 +47,6 @@ def build_dataset(cfg, mode):
     elif name == "XMLDataset":
         return XMLDataset(mode=mode, **dataset_cfg)
     elif name =="hub":
-        return HubDataset(mode=mode, **dataset_cfg)
+        return HubDataset(mode=mode,class_names=class_names,**dataset_cfg)
     else:
         raise NotImplementedError("Unknown dataset type!")

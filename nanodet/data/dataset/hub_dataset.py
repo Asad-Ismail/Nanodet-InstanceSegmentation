@@ -8,6 +8,10 @@ from collections import defaultdict
 
 from pycocotools.coco import COCO
 
+import deeplake as hub
+import cv2
+from tqdm import tqdm
+
 from .coco import CocoDataset
 
 
@@ -33,6 +37,8 @@ class CocoHub(COCO):
 class HubDataset(CocoDataset):
     def __init__(self, class_names, **kwargs):
         self.class_names = class_names
+        src="hub://aismail2/cucumber_OD"
+        self.ds = hub.load(src)
         super(HubDataset, self).__init__(**kwargs)
 
     def hub_to_coco(self, ann_path):
@@ -43,44 +49,48 @@ class HubDataset(CocoDataset):
         """
         logging.info("loading annotations into memory...")
         tic = time.time()
-        ann_file_names = get_file_list(ann_path, type=".xml")
-        logging.info("Found {} annotation files.".format(len(ann_file_names)))
         image_info = []
         categories = []
         annotations = []
+        
         for idx, supercat in enumerate(self.class_names):
-            categories.append(
-                {"supercategory": supercat, "id": idx + 1, "name": supercat}
-            )
+            categories.append({"supercategory": supercat, "id": idx + 1, "name": supercat})
+            
         ann_id = 1
-        for idx, xml_name in enumerate(ann_file_names):
-            tree = ET.parse(os.path.join(ann_path, xml_name))
-            root = tree.getroot()
-            file_name = root.find("filename").text
-            width = int(root.find("size").find("width").text)
-            height = int(root.find("size").find("height").text)
+        
+        for i,d in tqdm(enumerate(self.ds)):
+            image=d.images.numpy()
+            image=cv2.resize(image,(self.img_sz,self.img_sz))
+            masks=d.masks.numpy().astype(np.uint8)*255
+            mod_masks=[]
+            mod_boxes=[]
+            
+            file_name = f"{i}.png"
+            height,width,_=image.shape
             info = {
                 "file_name": file_name,
                 "height": height,
                 "width": width,
-                "id": idx + 1,
+                "id": i + 1,
             }
             image_info.append(info)
-            for _object in root.findall("object"):
-                category = _object.find("name").text
-                if category not in self.class_names:
-                    logging.warning(
-                        "WARNING! {} is not in class_names! "
-                        "Pass this box annotation.".format(category)
-                    )
-                    continue
-                for cat in categories:
-                    if category == cat["name"]:
-                        cat_id = cat["id"]
-                xmin = int(_object.find("bndbox").find("xmin").text)
-                ymin = int(_object.find("bndbox").find("ymin").text)
-                xmax = int(_object.find("bndbox").find("xmax").text)
-                ymax = int(_object.find("bndbox").find("ymax").text)
+            
+            for j in range(masks.shape[-1]):
+                mask=masks[...,j]
+                mask=cv2.resize(mask,(self.img_sz,self.img_sz),cv2.INTER_NEAREST)
+                nzeros=np.nonzero(mask)
+                ys=nzeros[0]
+                xs=nzeros[1]
+                ymin=min(ys)
+                ymax=max(ys)
+                xmin=min(xs)
+                xmax=max(xs)
+                croped_mask = mask[ymin : ymax , xmin: xmax]
+                ## resize masks to eventual size of masks to be predicted
+                croped_mask=cv2.resize(croped_mask,(self.seg_sz,self.seg_sz),cv2.INTER_NEAREST)
+                mod_masks.append(croped_mask)            
+                mod_boxes.append([xmin,ymin,xmax,ymax])
+                
                 w = xmax - xmin
                 h = ymax - ymin
                 if w < 0 or h < 0:
