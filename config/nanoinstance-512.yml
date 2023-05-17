@@ -63,7 +63,7 @@ model:
 data:
   train:
     name: hub
-    img_path: /home/ec2-user/SageMaker/Nanodet-InstanceSegmentation/data/cucumbers
+    img_path: /home/asad/dev/Nanodet-InstanceSegmentation/data/cucumbers
     ann_path: coco/annotations/instances_train2017.json
     input_size: [512,512] #[w,h]
     keep_ratio: False
@@ -81,7 +81,7 @@ data:
       normalize: [[103.53, 116.28, 123.675], [57.375, 57.12, 58.395]]
   val:
     name: hub
-    img_path: /home/ec2-user/SageMaker/Nanodet-InstanceSegmentation/data/cucumbers
+    img_path: /home/asad/dev/Nanodet-InstanceSegmentation/data/cucumbers
     ann_path: coco/annotations/instances_val2017.json
     input_size: [512,512] #[w,h]
     keep_ratio: False

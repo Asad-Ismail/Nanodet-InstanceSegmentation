@@ -64,6 +64,8 @@ class HubDataset(CocoDataset):
         ann_id = 1
         
         for i,d in tqdm(enumerate(self.ds)):
+            if (i>6):
+                break
             image=d.images.numpy()
             image=cv2.resize(image,(self.img_sz,self.img_sz))
             cv2.imwrite(os.path.join(self.img_path,f"{i}.png"),image)
@@ -124,6 +126,7 @@ class HubDataset(CocoDataset):
         }
         logging.info("Load {} xml files and {} boxes".format(len(image_info), len(annotations)))
         logging.info("Done (t={:0.2f}s)".format(time.time() - tic))
+            
         return coco_dict
 
     def get_data_info(self, ann_path):

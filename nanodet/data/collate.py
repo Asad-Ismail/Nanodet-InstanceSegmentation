@@ -16,7 +16,7 @@ import collections
 import re
 
 import torch
-from torch._six import string_classes
+#from torch._six import string_classes
 
 np_str_obj_array_pattern = re.compile(r"[SaUO]")
 
@@ -58,7 +58,7 @@ def collate_function(batch):
         return torch.tensor(batch, dtype=torch.float64)
     elif isinstance(elem, int):
         return torch.tensor(batch)
-    elif isinstance(elem, string_classes):
+    elif isinstance(elem, str):
         return batch
     elif isinstance(elem, collections.abc.Mapping):
         return {key: collate_function([d[key] for d in batch]) for key in elem}
