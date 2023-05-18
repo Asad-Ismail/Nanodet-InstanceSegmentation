@@ -185,9 +185,7 @@ class NanoDetPlusHead(nn.Module):
         ]
         center_priors = torch.cat(mlvl_center_priors, dim=1)
 
-        cls_preds, reg_preds = preds.split(
-            [self.num_classes, 4 * (self.reg_max + 1)], dim=-1
-        )
+        cls_preds, reg_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1 )
         dis_preds = self.distribution_project(reg_preds) * center_priors[..., 2, None]
         decoded_bboxes = distance2bbox(center_priors[..., :2], dis_preds)
 
@@ -244,9 +242,7 @@ class NanoDetPlusHead(nn.Module):
             dist_targets,
             num_pos,
         ) = assign
-        num_total_samples = max(
-            reduce_mean(torch.tensor(sum(num_pos)).to(device)).item(), 1.0
-        )
+        num_total_samples = max(reduce_mean(torch.tensor(sum(num_pos)).to(device)).item(), 1.0)
 
         labels = torch.cat(labels, dim=0)
         label_scores = torch.cat(label_scores, dim=0)
@@ -337,16 +333,13 @@ class NanoDetPlusHead(nn.Module):
             gt_labels,
             gt_bboxes_ignore,
         )
-        pos_inds, neg_inds, pos_gt_bboxes, pos_assigned_gt_inds = self.sample(
-            assign_result, gt_bboxes
-        )
+        
+        pos_inds, neg_inds, pos_gt_bboxes, pos_assigned_gt_inds = self.sample(assign_result, gt_bboxes)
 
         num_priors = center_priors.size(0)
         bbox_targets = torch.zeros_like(center_priors)
         dist_targets = torch.zeros_like(center_priors)
-        labels = center_priors.new_full(
-            (num_priors,), self.num_classes, dtype=torch.long
-        )
+        labels = center_priors.new_full((num_priors,), self.num_classes, dtype=torch.long)
         label_weights = center_priors.new_zeros(num_priors, dtype=torch.float)
         label_scores = center_priors.new_zeros(labels.shape, dtype=torch.float)
 
