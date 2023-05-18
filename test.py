@@ -9,6 +9,40 @@ import torch
 from nanodet.data.collate import naive_collate
 from nanodet.data.dataset import build_dataset
 
+import copy
+import json
+import os
+import warnings
+from typing import Any, Dict, List
+
+import torch
+import torch.distributed as dist
+from pytorch_lightning import LightningModule
+from pytorch_lightning.utilities import rank_zero_only
+
+from nanodet.data.batch_process import stack_batch_img
+from nanodet.optim import build_optimizer
+from nanodet.util import convert_avg_params, gather_results, mkdir
+
+from nanodet.model.arch import build_model
+from nanodet.model.weight_averager import build_weight_averager
+
+from pytorch_lightning.callbacks import TQDMProgressBar
+
+from nanodet.util import (
+    NanoDetLightningLogger,
+    cfg,
+    convert_old_model,
+    env_utils,
+    load_config,
+    load_model_weight,
+    mkdir,
+)
+
+
+
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 
 from nanodet.util import (
     cfg,
@@ -51,26 +85,15 @@ train_dataloader = torch.utils.data.DataLoader(
     drop_last=True,
 )
 
-for batch in train_dataset:
+#for batch in train_dataset:
+#    print(batch)
+#    break
+
+
+for batch in train_dataloader:
     print(batch)
+    break
 
-import copy
-import json
-import os
-import warnings
-from typing import Any, Dict, List
-
-import torch
-import torch.distributed as dist
-from pytorch_lightning import LightningModule
-from pytorch_lightning.utilities import rank_zero_only
-
-from nanodet.data.batch_process import stack_batch_img
-from nanodet.optim import build_optimizer
-from nanodet.util import convert_avg_params, gather_results, mkdir
-
-from nanodet.model.arch import build_model
-from nanodet.model.weight_averager import build_weight_averager
 
 
 class TrainingTask(LightningModule):
@@ -145,7 +168,7 @@ class TrainingTask(LightningModule):
                     loss_states[loss_name].mean().item(),
                     self.global_step,
                 )
-            self.logger.info(log_msg)
+            #self.logger.info(log_msg)
 
         return loss
 
@@ -350,7 +373,7 @@ class TrainingTask(LightningModule):
     # ------------Hooks-----------------
     def on_fit_start(self) -> None:
         if "weight_averager" in self.cfg.model:
-            self.logger.info("Weight Averaging is enabled")
+            #self.logger.info("Weight Averaging is enabled")
             if self.weight_averager and self.weight_averager.has_inited():
                 self.weight_averager.to(self.weight_averager.device)
                 return
@@ -393,4 +416,48 @@ class TrainingTask(LightningModule):
 
 task = TrainingTask(cfg)
 
-print(task)
+
+model_resume_path = (
+    os.path.join(cfg.save_dir, "model_last.ckpt")
+    if "resume" in cfg.schedule
+    else None
+)
+
+
+
+
+if cfg.device.gpu_ids == -1:
+    print("Using CPU training")
+    accelerator, devices, strategy, precision = (
+        "cpu",
+        None,
+        None,
+        cfg.device.precision,
+    )
+else:
+    accelerator, devices, strategy, precision = (
+        "gpu",
+        cfg.device.gpu_ids,
+        None,
+        cfg.device.precision,
+    )
+    
+logger = NanoDetLightningLogger(cfg.save_dir)
+logger.dump_cfg(cfg)
+
+trainer = pl.Trainer(
+    default_root_dir=cfg.save_dir,
+    max_epochs=cfg.schedule.total_epochs,
+    check_val_every_n_epoch=cfg.schedule.val_intervals,
+    accelerator=accelerator,
+    devices=devices,
+    log_every_n_steps=cfg.log.interval,
+    num_sanity_val_steps=0,
+    callbacks=[TQDMProgressBar(refresh_rate=0)],  # disable tqdm bar
+    benchmark=cfg.get("cudnn_benchmark", True),
+    gradient_clip_val=cfg.get("grad_clip", 0.0),
+    strategy=strategy,
+    precision=precision,
+)
+
+trainer.fit(task, train_dataloader, train_dataloader, ckpt_path=model_resume_path)
