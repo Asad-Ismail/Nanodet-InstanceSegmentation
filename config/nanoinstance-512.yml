@@ -27,7 +27,7 @@ model:
       use_depthwise: True
       activation: LeakyReLU
     head:
-      name: NanoDetPlusHead
+      name: NanoDet
       num_classes: 1
       input_channel: 96
       feat_channels: 96
