@@ -5,13 +5,13 @@
 #           AP_small = 0.083
 #               AP_m = 0.278
 #               AP_l = 0.451
-save_dir: workspace/nanodet-plus-cucumber_512
+save_dir: workspace/nanodet-plus-cucumber_512_test
 model:
   weight_averager:
     name: ExpMovingAverager
     decay: 0.9998
   arch:
-    name: OneStageDetector
+    name: OneStageDetectorSegmentor
     detach_epoch: 10
     backbone:
       name: ShuffleNetV2
@@ -27,7 +27,7 @@ model:
       use_depthwise: True
       activation: LeakyReLU
     head:
-      name: NanoDetHead
+      name: NanoSegHead
       num_classes: 1
       input_channel: 96
       feat_channels: 96
@@ -89,8 +89,8 @@ data:
       normalize: [[103.53, 116.28, 123.675], [57.375, 57.12, 58.395]]
 device:
   gpu_ids: -1 # Set like [0, 1, 2, 3] if you have multi-GPUs
-  workers_per_gpu: 8
-  batchsize_per_gpu: 16
+  workers_per_gpu: 1
+  batchsize_per_gpu: 3
   precision: 32 # set to 16 to use AMP training
 schedule:
 #  resume:

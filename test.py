@@ -176,6 +176,7 @@ class TrainingTask(LightningModule):
         self.trainer.save_checkpoint(os.path.join(self.cfg.save_dir, "model_last.ckpt"))
 
     def validation_step(self, batch, batch_idx):
+        return
         batch = self._preprocess_batch_input(batch)
         if self.weight_averager is not None:
             preds, loss, loss_states = self.avg_model.forward_train(batch)
@@ -200,7 +201,7 @@ class TrainingTask(LightningModule):
                 log_msg += "{}:{:.4f}| ".format(
                     loss_name, loss_states[loss_name].mean().item()
                 )
-            self.logger.info(log_msg)
+            #self.logger.info(log_msg)
 
         dets = self.model.head.post_process(preds, batch)
         return dets
@@ -214,6 +215,7 @@ class TrainingTask(LightningModule):
             validation_step_outputs: A list of val outputs
 
         """
+        return
         results = {}
         for res in validation_step_outputs:
             results.update(res)

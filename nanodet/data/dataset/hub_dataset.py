@@ -42,7 +42,7 @@ class HubDataset(CocoDataset):
         self.ds = hub.load(src)
         self.img_sz=kwargs["input_size"][0]
         self.seg_sz=64
-        self.save_imgs=True
+        self.save_imgs=False
         self.img_path=kwargs["img_path"]
         super(HubDataset, self).__init__(**kwargs)
 
@@ -68,7 +68,8 @@ class HubDataset(CocoDataset):
                 break
             image=d.images.numpy()
             image=cv2.resize(image,(self.img_sz,self.img_sz))
-            cv2.imwrite(os.path.join(self.img_path,f"{i}.png"),image)
+            if self.save_imgs:
+                cv2.imwrite(os.path.join(self.img_path,f"{i}.png"),image)
             masks=d.masks.numpy().astype(np.uint8)*255
             mod_masks=[]
             mod_boxes=[]

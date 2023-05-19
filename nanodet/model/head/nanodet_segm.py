@@ -20,7 +20,7 @@ from ..module.init_weights import normal_init
 from .gfl_head import GFLHead
 
 
-class NanoDetHead(GFLHead):
+class NanoDetSegmHead(GFLHead):
     """
     Modified from GFL, use same loss functions but much lightweight convolution heads
     """
@@ -45,7 +45,7 @@ class NanoDetHead(GFLHead):
         self.share_cls_reg = share_cls_reg
         self.activation = activation
         self.ConvModule = ConvModule if conv_type == "Conv" else DepthwiseConvModule
-        super(NanoDetHead, self).__init__(
+        super(NanoDetSegmHead, self).__init__(
             num_classes,
             loss,
             input_channel,
@@ -63,10 +63,11 @@ class NanoDetHead(GFLHead):
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
         for _ in self.strides:
-            cls_convs, reg_convs = self._buid_not_shared_head()
+            cls_convs, reg_convs, seg_convs = self._buid_not_shared_head()
             self.cls_convs.append(cls_convs)
             self.reg_convs.append(reg_convs)
-
+        # Segmentation head is shared 
+        self.seg_convs=_build_seg_head()
         self.gfl_cls = nn.ModuleList(
             [
                 nn.Conv2d(
@@ -87,6 +88,32 @@ class NanoDetHead(GFLHead):
                 for _ in self.strides
             ]
         )
+        # Segmentation Head
+        self.segm = nn.ModuleList(
+            [
+                nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
+                for _ in self.strides
+            ]
+        )
+
+    def _build_seg_head(self):
+        seg_convs = nn.ModuleList()
+        for i in range(self.stacked_convs):
+            chn = self.in_channels if i == 0 else self.feat_channels
+            seg_convs.append(
+                self.ConvModule(
+                    chn,
+                    self.feat_channels,
+                    3,
+                    stride=1,
+                    padding=1,
+                    norm_cfg=self.norm_cfg,
+                    bias=self.norm_cfg is None,
+                    activation=self.activation,
+                )
+            )
+        return seg_convs
+
 
     def _buid_not_shared_head(self):
         cls_convs = nn.ModuleList()
@@ -133,7 +160,6 @@ class NanoDetHead(GFLHead):
         for i in range(len(self.strides)):
             normal_init(self.gfl_cls[i], std=0.01, bias=bias_cls)
             normal_init(self.gfl_reg[i], std=0.01)
-        print("Finish initialize NanoDet Head.")
 
     def forward(self, feats):
         if torch.onnx.is_in_onnx_export():
@@ -154,6 +180,7 @@ class NanoDetHead(GFLHead):
                 output = torch.cat([cls_score, bbox_pred], dim=1)
             outputs.append(output.flatten(start_dim=2))
         outputs = torch.cat(outputs, dim=2).permute(0, 2, 1)
+        
         return outputs
 
     def _forward_onnx(self, feats):

@@ -17,6 +17,7 @@ import warnings
 
 from .nanodet_plus import NanoDetPlus
 from .one_stage_detector import OneStageDetector
+from .one_stage_detector_segmentor import OneStageDetectorSegmentor
 
 
 def build_model(model_cfg):
@@ -37,6 +38,8 @@ def build_model(model_cfg):
         )
     elif name == "NanoDetPlus":
         model = NanoDetPlus(**model_cfg.arch)
+    elif name == "OneStageDetectorSegmentor":
+        model = OneStageDetectorSegmentor(model_cfg.arch.backbone, model_cfg.arch.fpn, model_cfg.arch.head)
     else:
         raise NotImplementedError
     return model
