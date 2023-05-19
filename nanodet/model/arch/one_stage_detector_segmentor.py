@@ -28,13 +28,16 @@ class OneStageDetectorSegmentor(nn.Module):
         backbone_cfg,
         fpn_cfg=None,
         head_cfg=None,
+        msk_cfg=None
     ):
-        super(OneStageDetector, self).__init__()
+        super(OneStageDetectorSegmentor, self).__init__()
         self.backbone = build_backbone(backbone_cfg)
         if fpn_cfg is not None:
             self.fpn = build_fpn(fpn_cfg)
         if head_cfg is not None:
             self.head = build_head(head_cfg)
+        if msk_cfg is not None:
+            self.mask = msk_cfg
         self.epoch = 0
 
     def forward(self, x):
@@ -43,6 +46,8 @@ class OneStageDetectorSegmentor(nn.Module):
             x = self.fpn(x)
         if hasattr(self, "head"):
             x = self.head(x)
+        print(f"k"*20)
+        print(hasattr(self, "mask"))
         return x
 
     def inference(self, meta):
@@ -61,7 +66,6 @@ class OneStageDetectorSegmentor(nn.Module):
     def forward_train(self, gt_meta):
         preds = self(gt_meta["img"])
         loss, loss_states = self.head.loss(preds, gt_meta)
-        print(f"kk"*20)
         return preds, loss, loss_states
 
     def set_epoch(self, epoch):

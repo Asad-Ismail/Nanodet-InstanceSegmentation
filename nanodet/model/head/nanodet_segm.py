@@ -63,11 +63,12 @@ class NanoDetSegmHead(GFLHead):
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
         for _ in self.strides:
-            cls_convs, reg_convs, seg_convs = self._buid_not_shared_head()
+            cls_convs, reg_convs = self._buid_not_shared_head()
             self.cls_convs.append(cls_convs)
             self.reg_convs.append(reg_convs)
         # Segmentation head is shared 
         self.seg_convs=_build_seg_head()
+        
         self.gfl_cls = nn.ModuleList(
             [
                 nn.Conv2d(

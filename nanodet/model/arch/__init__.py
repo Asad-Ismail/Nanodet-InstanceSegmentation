@@ -39,7 +39,8 @@ def build_model(model_cfg):
     elif name == "NanoDetPlus":
         model = NanoDetPlus(**model_cfg.arch)
     elif name == "OneStageDetectorSegmentor":
-        model = OneStageDetectorSegmentor(model_cfg.arch.backbone, model_cfg.arch.fpn, model_cfg.arch.head)
+        model = OneStageDetectorSegmentor(model_cfg.arch.backbone, model_cfg.arch.fpn, model_cfg.arch.head,
+        model_cfg.arch.mask)
     else:
         raise NotImplementedError
     return model

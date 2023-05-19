@@ -26,6 +26,8 @@ model:
       num_extra_level: 1
       use_depthwise: True
       activation: LeakyReLU
+    mask:
+      mask_size: 64
     head:
       name: NanoSegHead
       num_classes: 1

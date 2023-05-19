@@ -225,9 +225,7 @@ class TrainingTask(LightningModule):
             else results
         )
         if all_results:
-            eval_results = self.evaluator.evaluate(
-                all_results, self.cfg.save_dir, rank=self.local_rank
-            )
+            eval_results = self.evaluator.evaluate(all_results, self.cfg.save_dir, rank=self.local_rank)
             metric = eval_results[self.cfg.evaluator.save_key]
             # save best model
             if metric > self.save_flag:
@@ -418,15 +416,11 @@ class TrainingTask(LightningModule):
 
 task = TrainingTask(cfg)
 
-
 model_resume_path = (
     os.path.join(cfg.save_dir, "model_last.ckpt")
     if "resume" in cfg.schedule
     else None
 )
-
-
-
 
 if cfg.device.gpu_ids == -1:
     print("Using CPU training")
