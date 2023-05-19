@@ -139,9 +139,8 @@ class NanoDetHead(GFLHead):
         if torch.onnx.is_in_onnx_export():
             return self._forward_onnx(feats)
         outputs = []
-        for x, cls_convs, reg_convs, gfl_cls, gfl_reg in zip(
-            feats, self.cls_convs, self.reg_convs, self.gfl_cls, self.gfl_reg
-        ):
+        print(f"Length of feature map is {len(feats)}")
+        for x, cls_convs, reg_convs, gfl_cls, gfl_reg in zip(feats, self.cls_convs, self.reg_convs, self.gfl_cls, self.gfl_reg):
             cls_feat = x
             reg_feat = x
             for cls_conv in cls_convs:
@@ -153,9 +152,12 @@ class NanoDetHead(GFLHead):
             else:
                 cls_score = gfl_cls(cls_feat)
                 bbox_pred = gfl_reg(reg_feat)
+                print(cls_score.shape)
                 output = torch.cat([cls_score, bbox_pred], dim=1)
             outputs.append(output.flatten(start_dim=2))
         outputs = torch.cat(outputs, dim=2).permute(0, 2, 1)
+        print(f"Final output appended is ")
+        print(outputs.shape)
         return outputs
 
     def _forward_onnx(self, feats):
@@ -178,7 +180,6 @@ class NanoDetHead(GFLHead):
             else:
                 cls_pred = gfl_cls(cls_feat)
                 reg_pred = gfl_reg(reg_feat)
-
             cls_pred = cls_pred.sigmoid()
             out = torch.cat([cls_pred, reg_pred], dim=1)
             outputs.append(out.flatten(start_dim=2))
