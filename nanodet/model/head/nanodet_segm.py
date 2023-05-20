@@ -68,7 +68,7 @@ class NanoDetSegmHead(GFLHead):
             self.reg_convs.append(reg_convs)
         # Segmentation head is shared 
         self.seg_convs=_build_seg_head()
-        
+
         self.gfl_cls = nn.ModuleList(
             [
                 nn.Conv2d(
@@ -181,7 +181,6 @@ class NanoDetSegmHead(GFLHead):
                 output = torch.cat([cls_score, bbox_pred], dim=1)
             outputs.append(output.flatten(start_dim=2))
         outputs = torch.cat(outputs, dim=2).permute(0, 2, 1)
-        
         return outputs
 
     def _forward_onnx(self, feats):
