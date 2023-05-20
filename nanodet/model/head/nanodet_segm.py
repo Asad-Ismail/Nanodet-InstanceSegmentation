@@ -226,17 +226,23 @@ class NanoDetSegmHead(GFLHead):
                 pred_masks = self.segm(pred_masks)
 
                 # Crop and resize the ground truth masks based on the predicted boxes
-                gt_resized_masks = self.crop_and_resize_masks(gt_masks[i], boxes, pred_masks.shape[-2:])
+                with torch.no_grad():
+                    gt_resized_masks = self.crop_and_resize_masks(gt_masks[i], boxes, pred_masks.shape[-2:])
 
                 # Calculate the mask loss
                 mask_loss = self.calculate_mask_loss(pred_masks, gt_resized_masks)
                 mask_losses.append(mask_loss)
             else:
-                pred_masks = torch.tensor([])
-                boxes = torch.tensor([])
-
+                pred_masks = torch.tensor([], device=features.device)
+                boxes = torch.tensor([], device=features.device)
+                
             all_pred_masks.append(pred_masks)
             all_boxes.append(boxes)
+
+        if mask_losses:
+            mean_mask_loss = torch.stack(mask_losses).mean()  # Return mean mask loss across all images
+        else:
+            mean_mask_loss = torch.tensor(0., device=features.device)
 
         return all_pred_masks, torch.stack(mask_losses).mean()  # Return mean mask loss across all images
 
