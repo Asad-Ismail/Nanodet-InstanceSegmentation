@@ -89,7 +89,11 @@ class CocoDataset(BaseDataset):
                 gt_bboxes.append(bbox)
                 gt_labels.append(self.cat2label[ann["category_id"]])
                 if self.use_instance_mask:
-                    gt_masks.append(self.coco_api.annToMask(ann))
+                    mask=ann["masks"]
+                    if type(mask) is np.ndarray:
+                        gt_masks.append(mask)
+                    else:
+                       gt_masks.append(self.coco_api.annToMask(ann))
                 if self.use_keypoint:
                     gt_keypoints.append(ann["keypoints"])
         if gt_bboxes:
@@ -106,7 +110,7 @@ class CocoDataset(BaseDataset):
             bboxes=gt_bboxes, labels=gt_labels, bboxes_ignore=gt_bboxes_ignore
         )
         if self.use_instance_mask:
-            annotation["masks"] = gt_masks
+            annotation["masks"] = np.array(gt_masks, dtype=np.float32)
         if self.use_keypoint:
             if gt_keypoints:
                 annotation["keypoints"] = np.array(gt_keypoints, dtype=np.float32)

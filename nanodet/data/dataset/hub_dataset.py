@@ -45,6 +45,7 @@ class HubDataset(CocoDataset):
         self.save_imgs=False
         self.img_path=kwargs["img_path"]
         super(HubDataset, self).__init__(**kwargs)
+        self.use_instance_mask= True
 
     def hub_to_coco(self, ann_path):
         """
@@ -71,9 +72,7 @@ class HubDataset(CocoDataset):
             if self.save_imgs:
                 cv2.imwrite(os.path.join(self.img_path,f"{i}.png"),image)
             masks=d.masks.numpy().astype(np.uint8)*255
-            mod_masks=[]
-            mod_boxes=[]
-            
+
             file_name = f"{i}.png"
             height,width,_=image.shape
             info = {
@@ -86,20 +85,15 @@ class HubDataset(CocoDataset):
             
             for j in range(masks.shape[-1]):
                 mask=masks[...,j]
-                mask=cv2.resize(mask,(self.img_sz,self.img_sz),cv2.INTER_NEAREST)
+                mask=cv2.resize(mask,(self.img_sz,self.img_sz),cv2.INTER_NEAREST)//255
+                #print(f"Mask min and max is {mask.min()},{mask.max()}")
                 nzeros=np.nonzero(mask)
                 ys=nzeros[0]
                 xs=nzeros[1]
                 ymin=min(ys)
                 ymax=max(ys)
                 xmin=min(xs)
-                xmax=max(xs)
-                croped_mask = mask[ymin : ymax , xmin: xmax]
-                ## resize masks to eventual size of masks to be predicted
-                croped_mask=cv2.resize(croped_mask,(self.seg_sz,self.seg_sz),cv2.INTER_NEAREST)
-                mod_masks.append(croped_mask)            
-                mod_boxes.append([xmin,ymin,xmax,ymax])
-                
+                xmax=max(xs)          
                 w = xmax - xmin
                 h = ymax - ymin
                 if w < 0 or h < 0:
@@ -116,6 +110,7 @@ class HubDataset(CocoDataset):
                     "iscrowd": 0,
                     "id": ann_id,
                     "area": coco_box[2] * coco_box[3],
+                    "masks":mask
                 }
                 annotations.append(ann)
                 ann_id += 1
