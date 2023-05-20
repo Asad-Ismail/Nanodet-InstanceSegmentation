@@ -67,7 +67,8 @@ class OneStageDetectorSegmentor(nn.Module):
         print(gt_meta["gt_masks"][0].shape)
         preds,features = self(gt_meta["img"])
         #print(f"Train is {self.training}")
-        masks = self.head.masks_process(preds,features,gt_meta)
+        #masks = self.head.masks_process(preds,features,gt_meta)
+        masks,mask_loss=process_mask_train(preds,features,gt_meta)
         loss, loss_states = self.head.loss(preds, gt_meta)
         return preds, loss, loss_states
 

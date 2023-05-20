@@ -211,6 +211,7 @@ class NanoDetSegmHead(GFLHead):
         feature_idx = 0
         _, _, fh, fw = features[feature_idx].shape
         spatial_scale = fh/input_height
+        output_size = (14, 14)  # The size of the predicted masks
 
         all_pred_masks = []
         all_boxes = []
@@ -220,7 +221,6 @@ class NanoDetSegmHead(GFLHead):
             image_boxes = result[0]
             if image_boxes.numel() > 0:
                 boxes = image_boxes[:,:4]
-                output_size = (14, 14)  # The size of the predicted masks
                 aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
                 pred_masks = self.seg_convs(aligned_features)
                 pred_masks = self.segm(pred_masks)
