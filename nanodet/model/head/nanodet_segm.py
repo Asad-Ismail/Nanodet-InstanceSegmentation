@@ -244,7 +244,7 @@ class NanoDetSegmHead(GFLHead):
         else:
             mean_mask_loss = torch.tensor(0., device=features[0].device)
 
-        return all_pred_masks, torch.stack(mask_losses).mean()  # Return mean mask loss across all images
+        return all_pred_masks, mean_mask_loss  # Return mean mask loss across all images
 
 
 
