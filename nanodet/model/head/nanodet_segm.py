@@ -150,36 +150,97 @@ class NanoDetSegmHead(GFLHead):
 
         return cls_convs, reg_convs
 
-    def masks_process(self, preds,features,meta):
+    def masks_process(self, preds, features, meta):
         cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
         result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
         input_height, input_width = meta["img"].shape[2:]
-        feature_idx=0
-        _,_,fh,fw=features[feature_idx].shape
-        spatial_scale=fh/input_height
-        #print(f"Spatial scale is {spatial_scale}")
+        feature_idx = 0
+        _, _, fh, fw = features[feature_idx].shape
+        spatial_scale = fh/input_height
         all_pred_masks = []
-        all_boxes=[]
+        all_boxes = []
         for i, result in enumerate(result_list):
             image_boxes = result[0]
             if image_boxes.numel() > 0:
-                # Perform ROI Align on the features using the bounding boxes
                 boxes = image_boxes[:,:4]
-                output_size = (14, 14)  # choose an appropriate size based on your use case
-                #print(f"Original feature shape is {features[feature_idx][i].shape}")
+                output_size = (14, 14)
                 aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
-                # Predict masks using these features
-                pred_masks=self.seg_convs(aligned_features)
-                pred_masks=self.segm(pred_masks)
-                #print(f"Pred mask shape, min and max are {pred_masks.shape},{pred_masks.min()},{pred_masks.max()}")
+                # use Sequential here
+                pred_masks = self.seg_convs(aligned_features)
+                pred_masks = self.segm(pred_masks).sigmoid()
             else:
-                # If no boxes found for the current image, append an empty tensor
                 pred_masks = torch.tensor([])
-                boxes=torch.tensor([])
-            # Add predicted masks (or empty tensor if no boxes) to the list
+                boxes = torch.tensor([])
+
             all_pred_masks.append(pred_masks)
             all_boxes.append(boxes)
+
         return all_pred_masks
+
+
+    def crop_gt_masks(self, gt_mask, boxes):
+        """
+        gt_mask: A tensor of shape (H, W) representing a binary ground truth mask.
+        boxes: A tensor of shape (N, 4) representing predicted bounding boxes, where N is the number of boxes.
+        """
+        cropped_masks = []
+        h, w = gt_mask.shape
+        for box in boxes:
+            x1, y1, x2, y2 = box.int()
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(w - 1, x2)
+            y2 = min(h - 1, y2)
+            cropped_mask = gt_mask[y1:y2, x1:x2]
+            cropped_masks.append(cropped_mask.unsqueeze(0))  # Add a dimension for stacking
+        cropped_masks = torch.cat(cropped_masks, dim=0)  # Stacks masks along a new dimension
+        return cropped_masks
+
+    def crop_and_resize_masks(self, gt_mask, boxes, size):
+        cropped_masks = self.crop_gt_masks(gt_mask, boxes)  # Use the crop_gt_masks function defined earlier
+        resized_masks = torch.nn.functional.interpolate(cropped_masks, size=size, mode='nearest')
+        return resized_masks
+
+
+    def process_mask_train(self, preds, features, meta):
+        cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
+        result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
+        gt_masks = meta["gt"]
+
+        input_height, input_width = meta["img"].shape[2:]
+        feature_idx = 0
+        _, _, fh, fw = features[feature_idx].shape
+        spatial_scale = fh/input_height
+
+        all_pred_masks = []
+        all_boxes = []
+        mask_losses = []
+
+        for i, result in enumerate(result_list):
+            image_boxes = result[0]
+            if image_boxes.numel() > 0:
+                boxes = image_boxes[:,:4]
+                output_size = (14, 14)  # The size of the predicted masks
+                aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
+                pred_masks = self.seg_convs(aligned_features)
+                pred_masks = self.segm(pred_masks)
+
+                # Crop and resize the ground truth masks based on the predicted boxes
+                gt_resized_masks = self.crop_and_resize_masks(gt_masks[i], boxes, pred_masks.shape[-2:])
+
+                # Calculate the mask loss
+                mask_loss = self.calculate_mask_loss(pred_masks, gt_resized_masks)
+                mask_losses.append(mask_loss)
+            else:
+                pred_masks = torch.tensor([])
+                boxes = torch.tensor([])
+
+            all_pred_masks.append(pred_masks)
+            all_boxes.append(boxes)
+
+        return all_pred_masks, torch.stack(mask_losses).mean()  # Return mean mask loss across all images
+
+
 
     def init_weights(self):
         for m in self.cls_convs.modules():
@@ -190,7 +251,6 @@ class NanoDetSegmHead(GFLHead):
                 normal_init(m, std=0.01)
         for m in self.seg_convs.modules():
             if isinstance(m, nn.Conv2d):
-                print(f"Initializing conv2d!!")
                 normal_init(m, std=0.01)
         # init cls head with confidence = 0.01
         bias_cls = -4.595
