@@ -14,6 +14,8 @@
 
 import torch
 import torch.nn as nn
+from torchvision.ops import roi_align
+
 
 from ..module.conv import ConvModule, DepthwiseConvModule
 from ..module.init_weights import normal_init
@@ -92,18 +94,14 @@ class NanoDetSegmHead(GFLHead):
             ]
         )
         # Segmentation Head
-        self.segm = nn.ModuleList(
-            [
-                nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
-                for _ in self.strides
-            ]
-        )
+        self.segm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
+
 
     def _build_seg_head(self):
-        seg_convs = nn.ModuleList()
+        modules = []
         for i in range(self.stacked_convs):
             chn = self.in_channels if i == 0 else self.feat_channels
-            seg_convs.append(
+            modules.append(
                 self.ConvModule(
                     chn,
                     self.feat_channels,
@@ -115,7 +113,8 @@ class NanoDetSegmHead(GFLHead):
                     activation=self.activation,
                 )
             )
-        return seg_convs
+        return nn.Sequential(*modules)
+
 
 
     def _buid_not_shared_head(self):
@@ -154,30 +153,33 @@ class NanoDetSegmHead(GFLHead):
     def masks_process(self, preds,features,meta):
         cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
         result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
-        # An array to store all predicted masks
+        input_height, input_width = meta["img"].shape[2:]
+        feature_idx=0
+        _,_,fh,fw=features[feature_idx].shape
+        spatial_scale=fh/input_height
+        #print(f"Spatial scale is {spatial_scale}")
         all_pred_masks = []
-
+        all_boxes=[]
         for i, result in enumerate(result_list):
             image_boxes = result[0]
             if image_boxes.numel() > 0:
                 # Perform ROI Align on the features using the bounding boxes
                 boxes = image_boxes[:,:4]
-                output_size = (14, 14)  # TODO change based on config
-                aligned_features = roi_align(features, [boxes], output_size, spatial_scale=1.0, sampling_ratio=-1)
+                output_size = (14, 14)  # choose an appropriate size based on your use case
+                #print(f"Original feature shape is {features[feature_idx][i].shape}")
+                aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
                 # Predict masks using these features
-                pred_masks = mask_net(aligned_features)
+                pred_masks=self.seg_convs(aligned_features)
+                pred_masks=self.segm(pred_masks)
+                #print(f"Pred mask shape, min and max are {pred_masks.shape},{pred_masks.min()},{pred_masks.max()}")
             else:
                 # If no boxes found for the current image, append an empty tensor
                 pred_masks = torch.tensor([])
-
+                boxes=torch.tensor([])
             # Add predicted masks (or empty tensor if no boxes) to the list
             all_pred_masks.append(pred_masks)
-
-        first_image=result_list[0][0]
-        if first_image.numel() > 0:
-            print(f"box min and max are {first_image[:,:4].min()}, {first_image[:,:4].max()}   ")
-            print(f"conf min and max {first_image[:,4].min()}, {first_image[:,4].max()}  ")
-        return result_list
+            all_boxes.append(boxes)
+        return all_pred_masks
 
     def init_weights(self):
         for m in self.cls_convs.modules():
@@ -185,6 +187,10 @@ class NanoDetSegmHead(GFLHead):
                 normal_init(m, std=0.01)
         for m in self.reg_convs.modules():
             if isinstance(m, nn.Conv2d):
+                normal_init(m, std=0.01)
+        for m in self.seg_convs.modules():
+            if isinstance(m, nn.Conv2d):
+                print(f"Initializing conv2d!!")
                 normal_init(m, std=0.01)
         # init cls head with confidence = 0.01
         bias_cls = -4.595
