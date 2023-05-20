@@ -62,12 +62,14 @@ class NanoDetSegmHead(GFLHead):
     def _init_layers(self):
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
+
         for _ in self.strides:
             cls_convs, reg_convs = self._buid_not_shared_head()
             self.cls_convs.append(cls_convs)
             self.reg_convs.append(reg_convs)
+
         # Segmentation head is shared 
-        self.seg_convs=_build_seg_head()
+        self.seg_convs=self._build_seg_head()
 
         self.gfl_cls = nn.ModuleList(
             [
@@ -148,6 +150,34 @@ class NanoDetSegmHead(GFLHead):
                 )
 
         return cls_convs, reg_convs
+
+    def masks_process(self, preds,features,meta):
+        cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
+        result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
+        # An array to store all predicted masks
+        all_pred_masks = []
+
+        for i, result in enumerate(result_list):
+            image_boxes = result[0]
+            if image_boxes.numel() > 0:
+                # Perform ROI Align on the features using the bounding boxes
+                boxes = image_boxes[:,:4]
+                output_size = (14, 14)  # TODO change based on config
+                aligned_features = roi_align(features, [boxes], output_size, spatial_scale=1.0, sampling_ratio=-1)
+                # Predict masks using these features
+                pred_masks = mask_net(aligned_features)
+            else:
+                # If no boxes found for the current image, append an empty tensor
+                pred_masks = torch.tensor([])
+
+            # Add predicted masks (or empty tensor if no boxes) to the list
+            all_pred_masks.append(pred_masks)
+
+        first_image=result_list[0][0]
+        if first_image.numel() > 0:
+            print(f"box min and max are {first_image[:,:4].min()}, {first_image[:,:4].max()}   ")
+            print(f"conf min and max {first_image[:,4].min()}, {first_image[:,4].max()}  ")
+        return result_list
 
     def init_weights(self):
         for m in self.cls_convs.modules():

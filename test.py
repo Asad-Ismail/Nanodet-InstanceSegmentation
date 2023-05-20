@@ -90,9 +90,9 @@ train_dataloader = torch.utils.data.DataLoader(
 #    break
 
 
-for batch in train_dataloader:
-    print(batch)
-    break
+#for batch in train_dataloader:
+#    print(batch)
+#    break
 
 
 

@@ -562,6 +562,7 @@ class GFLHead(nn.Module):
             cv2.imshow("det", result)
         return result
 
+
     def get_bboxes(self, cls_preds, reg_preds, img_metas):
         """Decode the outputs to bboxes.
         Args:

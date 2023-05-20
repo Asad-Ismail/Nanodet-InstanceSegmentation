@@ -43,18 +43,17 @@ class OneStageDetectorSegmentor(nn.Module):
     def forward(self, x):
         x = self.backbone(x)
         if hasattr(self, "fpn"):
-            x = self.fpn(x)
+            features = self.fpn(x)
         if hasattr(self, "head"):
-            x = self.head(x)
-        print(f"k"*20)
-        print(hasattr(self, "mask"))
-        return x
+            x = self.head(features)
+        return x,features
 
     def inference(self, meta):
         with torch.no_grad():
             torch.cuda.synchronize()
             time1 = time.time()
-            preds = self(meta["img"])
+            # features are for mask prediction
+            preds,features = self(meta["img"])
             torch.cuda.synchronize()
             time2 = time.time()
             print("forward time: {:.3f}s".format((time2 - time1)), end=" | ")
@@ -65,8 +64,11 @@ class OneStageDetectorSegmentor(nn.Module):
 
     def forward_train(self, gt_meta):
         preds = self(gt_meta["img"])
+        #print(f"Train is {self.training}")
+        masks = self.head.masks_process(preds, gt_meta)
         loss, loss_states = self.head.loss(preds, gt_meta)
         return preds, loss, loss_states
+
 
     def set_epoch(self, epoch):
         self.epoch = epoch
