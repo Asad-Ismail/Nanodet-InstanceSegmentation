@@ -205,7 +205,7 @@ class NanoDetSegmHead(GFLHead):
     def process_mask_train(self, preds, features, meta):
         cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
         result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
-        gt_masks = meta["gt"]
+        gt_masks = meta["gt_masks"]
 
         input_height, input_width = meta["img"].shape[2:]
         feature_idx = 0
@@ -233,8 +233,8 @@ class NanoDetSegmHead(GFLHead):
                 mask_loss = self.calculate_mask_loss(pred_masks, gt_resized_masks)
                 mask_losses.append(mask_loss)
             else:
-                pred_masks = torch.tensor([], device=features.device)
-                boxes = torch.tensor([], device=features.device)
+                pred_masks = torch.tensor([], device=features[0].device)
+                boxes = torch.tensor([], device=features[0].device)
                 
             all_pred_masks.append(pred_masks)
             all_boxes.append(boxes)
@@ -242,7 +242,7 @@ class NanoDetSegmHead(GFLHead):
         if mask_losses:
             mean_mask_loss = torch.stack(mask_losses).mean()  # Return mean mask loss across all images
         else:
-            mean_mask_loss = torch.tensor(0., device=features.device)
+            mean_mask_loss = torch.tensor(0., device=features[0].device)
 
         return all_pred_masks, torch.stack(mask_losses).mean()  # Return mean mask loss across all images
 
