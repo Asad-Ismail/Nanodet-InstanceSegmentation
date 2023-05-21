@@ -29,7 +29,7 @@ from nanodet.model.weight_averager import build_weight_averager
 
 from pytorch_lightning.callbacks import TQDMProgressBar
 
-from nanodet.util import (
+sfrom nanodet.util import (
     NanoDetLightningLogger,
     cfg,
     convert_old_model,
