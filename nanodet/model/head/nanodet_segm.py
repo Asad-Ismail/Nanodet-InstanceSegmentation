@@ -60,6 +60,32 @@ class NanoDetSegmHead(GFLHead):
             reg_max,
             **kwargs
         )
+    
+    class MaskLoss(nn.Module):
+        def __init__(self, mode='bce', eps=1e-7):
+            super().__init__()
+            self.mode = mode
+            self.eps = eps
+
+        def forward(self, pred, target):
+            if self.mode == 'bce':
+                return self.bce_loss(pred, target)
+            elif self.mode == 'dice':
+                return self.dice_loss(pred, target)
+            else:
+                raise ValueError("Unsupported loss type")
+
+        def bce_loss(self, pred, target):
+            bce = nn.BCEWithLogitsLoss()
+            return bce(pred, target)
+
+        def dice_loss(self, pred, target):
+            pred = torch.sigmoid(pred)
+
+            num = 2. * (pred * target).sum() + self.eps
+            den = pred.sum() + target.sum() + self.eps
+
+            return 1. - num / den
 
     def _init_layers(self):
         self.cls_convs = nn.ModuleList()
@@ -95,6 +121,8 @@ class NanoDetSegmHead(GFLHead):
         )
         # Segmentation Head
         self.segm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
+         # Usage
+        self.calculate_mask_loss = MaskLoss(mode='bce')
 
 
     def _build_seg_head(self):
@@ -182,7 +210,6 @@ class NanoDetSegmHead(GFLHead):
         masks: A tensor of shape (N, H, W) representing N binary masks.
         Returns: A tensor of shape (H, W) where each pixel is the sum of all masks at that location.
         """
-        print(f"Mask shape passed is {masks.shape}, {type(masks)}")
         combined_mask = masks.sum(dim=0)
         combined_mask = torch.where(combined_mask > 0, torch.tensor(1.0, device=combined_mask.device), torch.tensor(0.0, device=combined_mask.device))  # If a pixel is covered by any mask, set it to 1.0.
         return combined_mask
@@ -195,7 +222,6 @@ class NanoDetSegmHead(GFLHead):
         """
         cropped_masks = []
         gt_mask=self.masks_to_image(gt_mask)
-        print(f"Mask Min and Max is {gt_mask.min()}, {gt_mask.max()}")
         h, w = gt_mask.shape
         for box in boxes:
             x1, y1, x2, y2 = box.int()
@@ -210,7 +236,9 @@ class NanoDetSegmHead(GFLHead):
 
     def crop_and_resize_masks(self, gt_mask, boxes, size):
         cropped_masks = self.crop_gt_masks(gt_mask, boxes)  # Use the crop_gt_masks function defined earlier
-        resized_masks = torch.nn.functional.interpolate(cropped_masks, size=size, mode='nearest')
+        print(f"Cropped Masks reshape is {cropped_masks.shape}")
+        resized_masks = torch.nn.functional.interpolate(cropped_masks.unsqueeze(0), size=size, mode='nearest')
+        print(f"Cropped Masks reshape is {resized_masks.shape}")
         return resized_masks
 
 
@@ -223,7 +251,7 @@ class NanoDetSegmHead(GFLHead):
         feature_idx = 0
         _, _, fh, fw = features[feature_idx].shape
         spatial_scale = fh/input_height
-        output_size = (14, 14)  # The size of the predicted masks
+        output_size = (28, 28)  # The size of the predicted masks
 
         all_pred_masks = []
         all_boxes = []

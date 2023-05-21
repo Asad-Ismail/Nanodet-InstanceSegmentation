@@ -130,7 +130,7 @@ class TrainingTask(LightningModule):
             gt_masks= batch["gt_masks"]
             if isinstance(batch_imgs, list):
                 batch_masks = [torch.from_numpy(mask).to(self.device) for mask in gt_masks]
-                batch["gt_masks"]=gt_masks
+                batch["gt_masks"]=batch_masks
         return batch
 
     def forward(self, x):
