@@ -108,7 +108,7 @@ schedule:
   total_epochs: 300
   lr_schedule:
     name: CosineAnnealingLR
-    T_max: 300
+    T_max: 3000
     eta_min: 0.00005
   val_intervals: 10
 grad_clip: 35
@@ -116,6 +116,6 @@ evaluator:
   name: CocoDetectionEvaluator
   save_key: mAP
 log:
-  interval: 50
+  interval: 2
 
 class_names: ['cucumber']

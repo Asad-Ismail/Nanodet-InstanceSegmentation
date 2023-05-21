@@ -1,16 +1,13 @@
-# Copyright 2021 RangiLyu.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+
+import argparse
+import os
+import warnings
+
+import pytorch_lightning as pl
+import torch
+
+from nanodet.data.collate import naive_collate
+from nanodet.data.dataset import build_dataset
 
 import copy
 import json
@@ -27,8 +24,70 @@ from nanodet.data.batch_process import stack_batch_img
 from nanodet.optim import build_optimizer
 from nanodet.util import convert_avg_params, gather_results, mkdir
 
-from ..model.arch import build_model
-from ..model.weight_averager import build_weight_averager
+from nanodet.model.arch import build_model
+from nanodet.model.weight_averager import build_weight_averager
+
+from pytorch_lightning.callbacks import TQDMProgressBar
+import torch.nn.functional as F
+import numpy as np
+
+
+from nanodet.util import (
+    NanoDetLightningLogger,
+    cfg,
+    convert_old_model,
+    env_utils,
+    load_config,
+    load_model_weight,
+    mkdir,
+)
+
+
+
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
+
+from nanodet.util import (
+    cfg,
+    env_utils,
+    load_config,
+    load_model_weight,
+    mkdir,
+)
+
+from nanodet.model.arch import build_model
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config",default="config/nanoinstance-512.yml",help="train config file path")
+    parser.add_argument("--local_rank", default=-1, type=int, help="node rank for distributed training")
+    parser.add_argument("--seed", type=int, default=None, help="random seed")
+    args = parser.parse_args()
+    return args
+
+args = parse_args()
+load_config(cfg, args.config)
+
+
+if cfg.model.arch.head.num_classes != len(cfg.class_names):
+    raise ValueError(
+        "cfg.model.arch.head.num_classes must equal len(cfg.class_names), "
+        "but got {} and {}".format(cfg.model.arch.head.num_classes, len(cfg.class_names)))
+
+print("Setting up data...")
+train_dataset = build_dataset(cfg.data.train, "train",class_names=cfg.class_names)
+#val_dataset = build_dataset(cfg.data.val, "test")
+
+train_dataloader = torch.utils.data.DataLoader(
+    train_dataset,
+    batch_size=1,
+    shuffle=False,
+    num_workers=cfg.device.workers_per_gpu,
+    pin_memory=True,
+    collate_fn=naive_collate,
+    drop_last=True,
+)
+
 
 
 class TrainingTask(LightningModule):
@@ -75,8 +134,9 @@ class TrainingTask(LightningModule):
     @torch.no_grad()
     def predict(self, batch, batch_idx=None, dataloader_idx=None):
         batch = self._preprocess_batch_input(batch)
-        preds = self.forward(batch["img"])
-        results = self.model.head.post_process(preds, batch)
+        #preds = self.forward(batch["img"])
+        #results = self.model.head.post_process(preds, batch)
+        results=self.model.inference(batch)
         return results
 
     def training_step(self, batch, batch_idx):
@@ -109,7 +169,7 @@ class TrainingTask(LightningModule):
                     loss_states[loss_name].mean().item(),
                     self.global_step,
                 )
-            self.logger.info(log_msg)
+            #self.logger.info(log_msg)
 
         return loss
 
@@ -117,6 +177,7 @@ class TrainingTask(LightningModule):
         self.trainer.save_checkpoint(os.path.join(self.cfg.save_dir, "model_last.ckpt"))
 
     def validation_step(self, batch, batch_idx):
+        return
         batch = self._preprocess_batch_input(batch)
         if self.weight_averager is not None:
             preds, loss, loss_states = self.avg_model.forward_train(batch)
@@ -141,7 +202,7 @@ class TrainingTask(LightningModule):
                 log_msg += "{}:{:.4f}| ".format(
                     loss_name, loss_states[loss_name].mean().item()
                 )
-            self.logger.info(log_msg)
+            #self.logger.info(log_msg)
 
         dets = self.model.head.post_process(preds, batch)
         return dets
@@ -155,6 +216,7 @@ class TrainingTask(LightningModule):
             validation_step_outputs: A list of val outputs
 
         """
+        return
         results = {}
         for res in validation_step_outputs:
             results.update(res)
@@ -164,9 +226,7 @@ class TrainingTask(LightningModule):
             else results
         )
         if all_results:
-            eval_results = self.evaluator.evaluate(
-                all_results, self.cfg.save_dir, rank=self.local_rank
-            )
+            eval_results = self.evaluator.evaluate(all_results, self.cfg.save_dir, rank=self.local_rank)
             metric = eval_results[self.cfg.evaluator.save_key]
             # save best model
             if metric > self.save_flag:
@@ -314,7 +374,7 @@ class TrainingTask(LightningModule):
     # ------------Hooks-----------------
     def on_fit_start(self) -> None:
         if "weight_averager" in self.cfg.model:
-            self.logger.info("Weight Averaging is enabled")
+            #self.logger.info("Weight Averaging is enabled")
             if self.weight_averager and self.weight_averager.has_inited():
                 self.weight_averager.to(self.weight_averager.device)
                 return
@@ -353,3 +413,91 @@ class TrainingTask(LightningModule):
                 )
                 self.weight_averager.load_state_dict(avg_params)
                 self.logger.info("Loaded average state from checkpoint.")
+
+
+task = TrainingTask(cfg)
+
+model_resume_path =os.path.join(cfg.save_dir, "model_last.ckpt")
+
+# load model
+print(f"Loading model weights {model_resume_path}!!!")
+task.load_state_dict(torch.load(model_resume_path)["state_dict"]) 
+task.eval()
+
+if cfg.device.gpu_ids == -1:
+    print("Using CPU training")
+    accelerator, devices, strategy, precision = (
+        "cpu",
+        None,
+        None,
+        cfg.device.precision,
+    )
+else:
+    accelerator, devices, strategy, precision = (
+        "gpu",
+        cfg.device.gpu_ids,
+        None,
+        cfg.device.precision,
+    )
+
+def vis_masks(img,msks,boxes,msk_th=0.2,box_th=0.5):
+    imgh,imgw,_=img.shape
+    for i in range(msks.shape[0]):
+        box=boxes[i]
+        xmin=int(box[0])
+        xmax=int(box[2])
+        ymin=int(box[1])
+        ymax=int(box[3])
+
+        if box[4]<box_th:
+            print(f"Filtering using box threshold")
+            continue
+        
+        xmin=max(0,xmin)
+        xmax=max(0,xmax)
+        ymin=max(0,ymin)
+        ymax=max(0,ymax)
+        ## To Take care of max mask
+        xmax=min(xmax+1,imgw)
+        ymax=min(ymax+1,imgh)
+        w=xmax-xmin
+        h=ymax-ymin
+        msk=msks[i].unsqueeze(0)
+        #print(f"Mask shape is ss {msk.shape}")
+        msk=F.interpolate(msk, size=(h,w), mode='bicubic',align_corners=True)
+        msk[msk<msk_th]=0
+        msk=msk.squeeze(0).squeeze(0)
+        bmsk=msk>0
+        color=[np.random.randint(0,255) for _ in range(3)]
+        img[ymin:ymax,xmin:xmax][bmsk]=color
+        cv2.rectangle(img, (xmin, ymin), (xmax, ymax), color, 2)
+    return img
+
+
+
+def unnormalize(img, mean, std):
+    img = img.detach().squeeze(0).numpy()
+    img = img.astype(np.float32)
+    mean = np.array(mean, dtype=np.float32).reshape(-1, 1, 1)
+    std = np.array(std, dtype=np.float32).reshape(-1, 1, 1)
+    img = img * std + mean
+    img=img.transpose(1,2,0).astype(np.uint8)
+    return img
+
+    
+import cv2
+for i,batch in enumerate(train_dataloader):
+    with torch.no_grad():
+        predictions = task.predict(batch)
+        masks=predictions["masks"][0]
+        for k in predictions.keys():
+            out=predictions[k]
+            break
+        bbox=out[0]
+        #print(bbox)
+        #print(masks.shape)
+        raw_img=unnormalize(batch["img"], *cfg["data"]["train"]["pipeline"]["normalize"])
+        vis_img=vis_masks(raw_img.copy(),masks,bbox)
+        print(raw_img.shape)
+        #cv2.imwrite("kk.png",raw_img)
+        cv2.imwrite(f"kk_vis{i}.png",vis_img)
