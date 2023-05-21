@@ -43,9 +43,11 @@ class NanoDetSegmHead(GFLHead):
         activation="LeakyReLU",
         feat_channels=256,
         strides=[8, 16, 32],
+        mask_sz=48,
         **kwargs
     ):
         self.share_cls_reg = share_cls_reg
+        self.mask_sz=mask_sz
         self.activation = activation
         self.ConvModule = ConvModule if conv_type == "Conv" else DepthwiseConvModule
         super(NanoDetSegmHead, self).__init__(
@@ -193,7 +195,7 @@ class NanoDetSegmHead(GFLHead):
         feature_idx = 0
         _, _, fh, fw = features[feature_idx].shape
         spatial_scale = fh/input_height
-        output_size = (28, 28)
+        output_size = (self.mask_sz, self.mask_sz)
         all_pred_masks = []
         all_boxes = []
         for i, result in enumerate(result_list):
@@ -220,7 +222,7 @@ class NanoDetSegmHead(GFLHead):
         feature_idx = 0
         _, _, fh, fw = features[feature_idx].shape
         spatial_scale = fh/input_height
-        output_size = (28, 28)  # The size of the predicted masks
+        output_size = (self.mask_sz, self.mask_sz)  # The size of the predicted masks
 
         all_pred_masks = []
         all_boxes = []
