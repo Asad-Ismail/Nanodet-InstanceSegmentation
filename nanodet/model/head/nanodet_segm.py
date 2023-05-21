@@ -20,33 +20,8 @@ from torchvision.ops import roi_align
 from ..module.conv import ConvModule, DepthwiseConvModule
 from ..module.init_weights import normal_init
 from .gfl_head import GFLHead
+from ..loss.mask_loss import CombinedMaskLoss
 
-
-class MaskLoss(nn.Module):
-    def __init__(self, mode='bce', eps=1e-7):
-        super().__init__()
-        self.mode = mode
-        self.eps = eps
-
-    def forward(self, pred, target):
-        if self.mode == 'bce':
-            return self.bce_loss(pred, target)
-        elif self.mode == 'dice':
-            return self.dice_loss(pred, target)
-        else:
-            raise ValueError("Unsupported loss type")
-
-    def bce_loss(self, pred, target):
-        bce = nn.BCEWithLogitsLoss()
-        return bce(pred, target)
-
-    def dice_loss(self, pred, target):
-        pred = torch.sigmoid(pred)
-
-        num = 2. * (pred * target).sum() + self.eps
-        den = pred.sum() + target.sum() + self.eps
-
-        return 1. - num / den
 
 class NanoDetSegmHead(GFLHead):
     """
@@ -122,7 +97,7 @@ class NanoDetSegmHead(GFLHead):
         # Segmentation Head
         self.segm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
          # Segmentation loss
-        self.calculate_mask_loss = MaskLoss(mode='bce')
+        self.calculate_mask_loss = CombinedMaskLoss
 
 
     def _build_seg_head(self):
@@ -176,32 +151,6 @@ class NanoDetSegmHead(GFLHead):
 
         return cls_convs, reg_convs
 
-    def masks_process(self, preds, features, meta):
-        cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
-        result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
-        input_height, input_width = meta["img"].shape[2:]
-        feature_idx = 0
-        _, _, fh, fw = features[feature_idx].shape
-        spatial_scale = fh/input_height
-        output_size = (28, 28)
-        all_pred_masks = []
-        all_boxes = []
-        for i, result in enumerate(result_list):
-            image_boxes = result[0]
-            if image_boxes.numel() > 0:
-                boxes = image_boxes[:,:4]
-                aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
-                # use Sequential here
-                pred_masks = self.seg_convs(aligned_features)
-                pred_masks = self.segm(pred_masks).sigmoid()
-            else:
-                pred_masks = torch.tensor([])
-                boxes = torch.tensor([])
-
-            all_pred_masks.append(pred_masks)
-            all_boxes.append(boxes)
-        return all_pred_masks
-
     def masks_to_image(self,masks):
         """
         masks: A tensor of shape (N, H, W) representing N binary masks.
@@ -237,6 +186,30 @@ class NanoDetSegmHead(GFLHead):
         cropped_masks = self.crop_gt_masks(gt_mask, boxes,size)  # Use the crop_gt_masks function defined earlier
         return cropped_masks
 
+    def masks_process(self, preds, features, meta):
+        cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
+        result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
+        input_height, input_width = meta["img"].shape[2:]
+        feature_idx = 0
+        _, _, fh, fw = features[feature_idx].shape
+        spatial_scale = fh/input_height
+        output_size = (28, 28)
+        all_pred_masks = []
+        all_boxes = []
+        for i, result in enumerate(result_list):
+            image_boxes = result[0]
+            if image_boxes.numel() > 0:
+                boxes = image_boxes[:,:4]
+                aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
+                pred_masks = self.seg_convs(aligned_features)
+                pred_masks = self.segm(pred_masks).sigmoid()
+            else:
+                pred_masks = torch.tensor([])
+                boxes = torch.tensor([])
+
+            all_pred_masks.append(pred_masks)
+            all_boxes.append(boxes)
+        return all_pred_masks
 
     def process_mask_train(self, preds, features, meta):
         cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
