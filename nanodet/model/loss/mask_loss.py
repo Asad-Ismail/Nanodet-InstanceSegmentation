@@ -1,6 +1,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class BoundaryLoss(torch.nn.Module):
@@ -52,5 +53,7 @@ class CombinedMaskLoss(nn.Module):
     def forward(self, pred, target):
         mask_loss_value = self.mask_loss(pred, target)
         boundary_loss_value = self.boundary_loss(pred, target)
+        print(f"kk"*20)
+        print(boundary_loss_value.shape)
         combined_loss = self.mask_loss_weight * mask_loss_value + self.boundary_loss_weight * boundary_loss_value
         return combined_loss

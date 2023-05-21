@@ -97,7 +97,7 @@ class NanoDetSegmHead(GFLHead):
         # Segmentation Head
         self.segm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
          # Segmentation loss
-        self.calculate_mask_loss = CombinedMaskLoss
+        self.calculate_mask_loss = CombinedMaskLoss()
 
 
     def _build_seg_head(self):
