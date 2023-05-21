@@ -22,6 +22,32 @@ from ..module.init_weights import normal_init
 from .gfl_head import GFLHead
 
 
+class MaskLoss(nn.Module):
+    def __init__(self, mode='bce', eps=1e-7):
+        super().__init__()
+        self.mode = mode
+        self.eps = eps
+
+    def forward(self, pred, target):
+        if self.mode == 'bce':
+            return self.bce_loss(pred, target)
+        elif self.mode == 'dice':
+            return self.dice_loss(pred, target)
+        else:
+            raise ValueError("Unsupported loss type")
+
+    def bce_loss(self, pred, target):
+        bce = nn.BCEWithLogitsLoss()
+        return bce(pred, target)
+
+    def dice_loss(self, pred, target):
+        pred = torch.sigmoid(pred)
+
+        num = 2. * (pred * target).sum() + self.eps
+        den = pred.sum() + target.sum() + self.eps
+
+        return 1. - num / den
+
 class NanoDetSegmHead(GFLHead):
     """
     Modified from GFL, use same loss functions but much lightweight convolution heads
@@ -60,32 +86,6 @@ class NanoDetSegmHead(GFLHead):
             reg_max,
             **kwargs
         )
-    
-    class MaskLoss(nn.Module):
-        def __init__(self, mode='bce', eps=1e-7):
-            super().__init__()
-            self.mode = mode
-            self.eps = eps
-
-        def forward(self, pred, target):
-            if self.mode == 'bce':
-                return self.bce_loss(pred, target)
-            elif self.mode == 'dice':
-                return self.dice_loss(pred, target)
-            else:
-                raise ValueError("Unsupported loss type")
-
-        def bce_loss(self, pred, target):
-            bce = nn.BCEWithLogitsLoss()
-            return bce(pred, target)
-
-        def dice_loss(self, pred, target):
-            pred = torch.sigmoid(pred)
-
-            num = 2. * (pred * target).sum() + self.eps
-            den = pred.sum() + target.sum() + self.eps
-
-            return 1. - num / den
 
     def _init_layers(self):
         self.cls_convs = nn.ModuleList()
