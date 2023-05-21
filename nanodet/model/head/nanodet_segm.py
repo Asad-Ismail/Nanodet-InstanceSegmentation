@@ -177,13 +177,15 @@ class NanoDetSegmHead(GFLHead):
 
         return all_pred_masks
 
-    def masks_to_image(masks):
+    def masks_to_image(self,masks):
         """
         masks: A tensor of shape (N, H, W) representing N binary masks.
-        Returns: A tensor of shape (H, W) where each pixel is the logical OR of all masks at that location.
+        Returns: A tensor of shape (H, W) where each pixel is the sum of all masks at that location.
         """
-        combined_mask = torch.logical_or.reduce(masks, dim=0)
-        return combined_mask.float()  # Cast to float
+        print(f"Mask shape passed is {masks.shape}, {type(masks)}")
+        combined_mask = masks.sum(dim=0)
+        combined_mask = torch.where(combined_mask > 0, torch.tensor(1.0, device=combined_mask.device), torch.tensor(0.0, device=combined_mask.device))  # If a pixel is covered by any mask, set it to 1.0.
+        return combined_mask
 
 
     def crop_gt_masks(self, gt_mask, boxes):
@@ -192,7 +194,7 @@ class NanoDetSegmHead(GFLHead):
         boxes: A tensor of shape (N, 4) representing predicted bounding boxes, where N is the number of boxes.
         """
         cropped_masks = []
-        gt_mask=masks_to_image(gt_mask)
+        gt_mask=self.masks_to_image(gt_mask)
         print(f"Mask Min and Max is {gt_mask.min()}, {gt_mask.max()}")
         h, w = gt_mask.shape
         for box in boxes:

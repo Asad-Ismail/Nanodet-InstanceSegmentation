@@ -125,6 +125,12 @@ class TrainingTask(LightningModule):
             batch_imgs = [img.to(self.device) for img in batch_imgs]
             batch_img_tensor = stack_batch_img(batch_imgs, divisible=32)
             batch["img"] = batch_img_tensor
+        # Convert masks to torch tensors
+        if "gt_masks" in batch:
+            gt_masks= batch["gt_masks"]
+            if isinstance(batch_imgs, list):
+                batch_masks = [torch.from_numpy(mask).to(self.device) for mask in gt_masks]
+                batch["gt_masks"]=gt_masks
         return batch
 
     def forward(self, x):

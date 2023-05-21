@@ -50,7 +50,6 @@ def collate_function(batch):
             # array of string classes and object
             if np_str_obj_array_pattern.search(elem.dtype.str) is not None:
                 raise TypeError(default_collate_err_msg_format.format(elem.dtype))
-
             return batch
         elif elem.shape == ():  # scalars
             return batch
