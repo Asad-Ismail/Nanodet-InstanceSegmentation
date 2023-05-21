@@ -121,7 +121,7 @@ class NanoDetSegmHead(GFLHead):
         )
         # Segmentation Head
         self.segm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
-         # Usage
+         # Segmentation loss
         self.calculate_mask_loss = MaskLoss(mode='bce')
 
 
@@ -142,8 +142,6 @@ class NanoDetSegmHead(GFLHead):
                 )
             )
         return nn.Sequential(*modules)
-
-
 
     def _buid_not_shared_head(self):
         cls_convs = nn.ModuleList()
