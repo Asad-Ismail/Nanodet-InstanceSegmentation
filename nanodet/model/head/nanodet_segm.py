@@ -183,13 +183,13 @@ class NanoDetSegmHead(GFLHead):
         feature_idx = 0
         _, _, fh, fw = features[feature_idx].shape
         spatial_scale = fh/input_height
+        output_size = (28, 28)
         all_pred_masks = []
         all_boxes = []
         for i, result in enumerate(result_list):
             image_boxes = result[0]
             if image_boxes.numel() > 0:
                 boxes = image_boxes[:,:4]
-                output_size = (14, 14)
                 aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
                 # use Sequential here
                 pred_masks = self.seg_convs(aligned_features)
@@ -200,7 +200,6 @@ class NanoDetSegmHead(GFLHead):
 
             all_pred_masks.append(pred_masks)
             all_boxes.append(boxes)
-
         return all_pred_masks
 
     def masks_to_image(self,masks):
@@ -209,11 +208,11 @@ class NanoDetSegmHead(GFLHead):
         Returns: A tensor of shape (H, W) where each pixel is the sum of all masks at that location.
         """
         combined_mask = masks.sum(dim=0)
-        combined_mask = torch.where(combined_mask > 0, torch.tensor(1.0, device=combined_mask.device), torch.tensor(0.0, device=combined_mask.device))  # If a pixel is covered by any mask, set it to 1.0.
+        combined_mask = torch.where(combined_mask > 0, 1.0, 0.0)  
         return combined_mask
 
 
-    def crop_gt_masks(self, gt_mask, boxes):
+    def crop_gt_masks(self, gt_mask, boxes,size):
         """
         gt_mask: A tensor of shape (H, W) representing a binary ground truth mask.
         boxes: A tensor of shape (N, 4) representing predicted bounding boxes, where N is the number of boxes.
@@ -228,16 +227,15 @@ class NanoDetSegmHead(GFLHead):
             x2 = min(w - 1, x2)
             y2 = min(h - 1, y2)
             cropped_mask = gt_mask[y1:y2, x1:x2]
-            cropped_masks.append(cropped_mask.unsqueeze(0))  # Add a dimension for stacking
+            cropped_mask = cropped_mask[None, None, ...] 
+            resized_masks = torch.nn.functional.interpolate(cropped_mask, size=size, mode='nearest')
+            cropped_masks.append(resized_masks)  # Add a dimension for stacking
         cropped_masks = torch.cat(cropped_masks, dim=0)  # Stacks masks along a new dimension
         return cropped_masks
 
     def crop_and_resize_masks(self, gt_mask, boxes, size):
-        cropped_masks = self.crop_gt_masks(gt_mask, boxes)  # Use the crop_gt_masks function defined earlier
-        print(f"Cropped Masks reshape is {cropped_masks.shape}")
-        resized_masks = torch.nn.functional.interpolate(cropped_masks.unsqueeze(0), size=size, mode='nearest')
-        print(f"Cropped Masks reshape is {resized_masks.shape}")
-        return resized_masks
+        cropped_masks = self.crop_gt_masks(gt_mask, boxes,size)  # Use the crop_gt_masks function defined earlier
+        return cropped_masks
 
 
     def process_mask_train(self, preds, features, meta):
@@ -281,7 +279,7 @@ class NanoDetSegmHead(GFLHead):
             mean_mask_loss = torch.stack(mask_losses).mean()  # Return mean mask loss across all images
         else:
             mean_mask_loss = torch.tensor(0., device=features[0].device)
-
+        print(f"Length of all masks {len(all_pred_masks)}")
         return all_pred_masks, mean_mask_loss  # Return mean mask loss across all images
 
 
