@@ -534,9 +534,7 @@ class GFLHead(nn.Module):
             else meta["img_info"]["id"]
         )
 
-        for result, img_width, img_height, img_id, warp_matrix in zip(
-            result_list, img_widths, img_heights, img_ids, warp_matrixes
-        ):
+        for result, img_width, img_height, img_id, warp_matrix in zip(result_list, img_widths, img_heights, img_ids, warp_matrixes):
             det_result = {}
             det_bboxes, det_labels = result
             det_bboxes = det_bboxes.detach().cpu().numpy()

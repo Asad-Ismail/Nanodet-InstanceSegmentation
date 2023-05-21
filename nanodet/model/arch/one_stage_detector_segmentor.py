@@ -58,18 +58,19 @@ class OneStageDetectorSegmentor(nn.Module):
             time2 = time.time()
             print("forward time: {:.3f}s".format((time2 - time1)), end=" | ")
             results = self.head.post_process(preds, meta)
+            masks = self.head.masks_process(preds,features,gt_meta)
             torch.cuda.synchronize()
             print("decode time: {:.3f}s".format((time.time() - time2)), end=" | ")
         return results
 
     def forward_train(self, gt_meta):
-        #print(len(gt_meta["gt_masks"]))
-        #print(gt_meta["gt_masks"][0].shape)
         preds,features = self(gt_meta["img"])
-        #print(f"Train is {self.training}")
         #masks = self.head.masks_process(preds,features,gt_meta)
-        masks,mask_loss=self.head.process_mask_train(preds,features,gt_meta)
+        _,mask_loss=self.head.process_mask_train(preds,features,gt_meta)
         loss, loss_states = self.head.loss(preds, gt_meta)
+        # Add mask loss to loss dict
+        loss+=mask_loss
+        loss_states["MaskLoss"]=mask_loss
         return preds, loss, loss_states
 
 
