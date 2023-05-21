@@ -3,11 +3,12 @@
 <img src="docs/imgs/Title.jpg" />
 
 # An Instance Segmentation Example
-    
+
+
+## Main contribution of this fork is to add instance segmentation capabilities to nano det and nano det + to make it more powerful
     
 # NanoDet-Plus
-**Super fast and high accuracy lightweight anchor-free object detection model. Real-time on mobile devices.**
-
+**Super fast and high accuracy lightweight anchor-free object detection/ Instance segmentation model. Real-time on mobile devices.**
 
 [![CI testing](https://img.shields.io/github/checks-status/RangiLyu/nanodet/main?label=CI&style=flat)](https://img.shields.io/github/checks-status/RangiLyu/nanodet/main?label=CI&style=flat)
 ![Codecov](https://img.shields.io/codecov/c/github/RangiLyu/nanodet?color=hotpink)
@@ -16,6 +17,8 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/RangiLyu/nanodet?style=flat)](https://img.shields.io/github/v/release/RangiLyu/nanodet?style=flat)
 
 </div>
+
+
 
 * ⚡Super lightweight: Model file is only 980KB(INT8) or 1.8MB(FP16).
 * ⚡Super fast: 97fps(10.23ms) on mobile ARM CPU.
