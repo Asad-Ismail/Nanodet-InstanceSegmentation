@@ -192,4 +192,4 @@ for i,batch in enumerate(train_dataloader):
         vis_img=vis_masks(raw_img.copy(),masks,bbox)
         print(raw_img.shape)
         #cv2.imwrite("kk.png",raw_img)
-        cv2.imwrite(f"vis_results/vis{i}.png",vis_img)
+        cv2.imwrite(f"vis_results/v2_vis{i}.png",vis_img)
