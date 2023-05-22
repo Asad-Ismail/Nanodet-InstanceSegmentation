@@ -57,9 +57,8 @@ class OneStageDetectorSegmentor(nn.Module):
             torch.cuda.synchronize()
             time2 = time.time()
             print("forward time: {:.3f}s".format((time2 - time1)), end=" | ")
-            results = self.head.post_process(preds, meta)
             masks = self.head.masks_process(preds,features,meta)
-            results["masks"]=masks
+            results = self.head.post_process(preds,masks, meta)
             torch.cuda.synchronize()
             print("decode time: {:.3f}s".format((time.time() - time2)), end=" | ")
         return results

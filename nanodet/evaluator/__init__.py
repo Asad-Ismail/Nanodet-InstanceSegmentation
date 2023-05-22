@@ -21,5 +21,7 @@ def build_evaluator(cfg, dataset):
     name = evaluator_cfg.pop("name")
     if name == "CocoDetectionEvaluator":
         return CocoDetectionEvaluator(dataset)
+    if name == "CocoSegmentationEvaluator":
+        return CocoSegmentationEvaluator(dataset)
     else:
         raise NotImplementedError

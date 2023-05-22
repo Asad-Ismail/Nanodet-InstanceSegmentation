@@ -138,14 +138,15 @@ def generate_random_color():
     """Generate a random RGB color."""
     return [np.random.randint(0, 255) for _ in range(3)]
 
-def vis_masks(img, masks, boxes, mask_threshold=0.2, box_threshold=0.5):
+def vis_masks(img, masks, boxes,scores,mask_threshold=0.2, box_threshold=0.5):
     height, width, _ = img.shape
-    for mask, box in zip(masks, boxes):
-        x_min, y_min, x_max, y_max, box_score = box
+
+    for mask, box, score in zip(masks, boxes,scores):
+        x_min, y_min, x_max, y_max = box
 
         x_min, y_min, x_max, y_max = map(int, [x_min, y_min, x_max, y_max])
 
-        if box_score < box_threshold:
+        if score < box_threshold:
             print("Filtering using box threshold")
             continue
 
@@ -154,6 +155,7 @@ def vis_masks(img, masks, boxes, mask_threshold=0.2, box_threshold=0.5):
 
         width, height = x_max - x_min, y_max - y_min
 
+        print(f"Mask type and min and max is {mask.dtype}, {mask.max()}")
         mask = mask.unsqueeze(0)
         mask = F.interpolate(mask, size=(height, width), mode='bicubic', align_corners=True)
         mask[mask < mask_threshold] = 0
@@ -177,19 +179,16 @@ def unnormalize(img, mean, std):
     return img
 
 
-    
 for i,batch in enumerate(train_dataloader):
     with torch.no_grad():
         predictions = task.predict(batch)
-        masks=predictions["masks"][0]
-        for k in predictions.keys():
-            out=predictions[k]
-            break
-        bbox=out[0]
-        #print(bbox)
-        #print(masks.shape)
-        raw_img=unnormalize(batch["img"], *cfg["data"]["train"]["pipeline"]["normalize"])
-        vis_img=vis_masks(raw_img.copy(),masks,bbox)
-        print(raw_img.shape)
-        #cv2.imwrite("kk.png",raw_img)
-        cv2.imwrite(f"vis_results/v2_vis{i}.png",vis_img)
+        for k,v in predictions.items():
+            for clas,preds in v.items():
+                bboxes=[item["bbox"] for item in preds]
+                masks=[torch.from_numpy(np.array(item["mask"])) for item in preds]
+                scores=[item["score"] for item in preds]
+                raw_img=unnormalize(batch["img"], *cfg["data"]["train"]["pipeline"]["normalize"])
+                vis_img=vis_masks(raw_img.copy(),masks,bboxes,scores)
+                print(raw_img.shape)
+                #cv2.imwrite("kk.png",raw_img)
+                cv2.imwrite(f"vis_results/v2_vis{i}.png",vis_img)

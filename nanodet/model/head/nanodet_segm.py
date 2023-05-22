@@ -15,12 +15,14 @@
 import torch
 import torch.nn as nn
 from torchvision.ops import roi_align
+import numpy as np
 
 
 from ..module.conv import ConvModule, DepthwiseConvModule
 from ..module.init_weights import normal_init
 from .gfl_head import GFLHead
-from ..loss.mask_loss import CombinedMaskLoss
+from ..loss.mask_loss import CombinedMaskLoss,MaskLoss
+from ...data.transform.warp import warp_boxes
 
 
 class NanoDetSegmHead(GFLHead):
@@ -99,7 +101,7 @@ class NanoDetSegmHead(GFLHead):
         # Segmentation Head
         self.segm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 1, padding=0)
          # Segmentation loss
-        self.calculate_mask_loss = CombinedMaskLoss()
+        self.calculate_mask_loss = MaskLoss()
 
 
     def _build_seg_head(self):
@@ -256,7 +258,47 @@ class NanoDetSegmHead(GFLHead):
             mean_mask_loss = torch.tensor(0., device=features[0].device)
         return all_pred_masks, mean_mask_loss  # Return mean mask loss across all images
 
+    ## Overwrite post processing
+    def post_process(self, preds, pred_masks, meta):
+        cls_scores, bbox_preds = preds.split([self.num_classes, 4 * (self.reg_max + 1)], dim=-1)
+        result_list = self.get_bboxes(cls_scores, bbox_preds, meta)
+        det_results = {}
+        warp_matrixes = (
+            meta["warp_matrix"]
+            if isinstance(meta["warp_matrix"], list)
+            else meta["warp_matrix"]
+        )
+        img_heights = (
+            meta["img_info"]["height"].cpu().numpy()
+            if isinstance(meta["img_info"]["height"], torch.Tensor)
+            else meta["img_info"]["height"]
+        )
+        img_widths = (
+            meta["img_info"]["width"].cpu().numpy()
+            if isinstance(meta["img_info"]["width"], torch.Tensor)
+            else meta["img_info"]["width"]
+        )
+        img_ids = (
+            meta["img_info"]["id"].cpu().numpy()
+            if isinstance(meta["img_info"]["id"], torch.Tensor)
+            else meta["img_info"]["id"]
+        )
 
+        for result, img_width, img_height, img_id, warp_matrix,masks in zip(result_list, img_widths, img_heights, img_ids, warp_matrixes,pred_masks):
+            det_result = {}
+            det_bboxes, det_labels = result
+            det_bboxes = det_bboxes.detach().cpu().numpy()
+            det_bboxes[:, :4] = warp_boxes(det_bboxes[:, :4], np.linalg.inv(warp_matrix), img_width, img_height)
+            classes = det_labels.detach().cpu().numpy()
+            for i in range(self.num_classes):
+                inds = classes == i
+                det_result[i] = [{
+                    'bbox': bbox[:4].astype(np.float32).tolist(), 
+                    'score': float(bbox[4]), 
+                    'mask': mask.tolist()
+                } for ind, bbox,mask in zip(inds, det_bboxes,masks) if ind]
+            det_results[img_id] = det_result
+        return det_results
 
     def init_weights(self):
         for m in self.cls_convs.modules():
