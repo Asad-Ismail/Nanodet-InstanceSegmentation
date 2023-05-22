@@ -154,8 +154,7 @@ def vis_masks(img, masks, boxes,scores,mask_threshold=0.2, box_threshold=0.5):
         y_min, y_max = max(0, y_min), min(y_max+1, height)
 
         width, height = x_max - x_min, y_max - y_min
-
-        print(f"Mask type and min and max is {mask.dtype}, {mask.max()}")
+        
         mask = mask.unsqueeze(0)
         mask = F.interpolate(mask, size=(height, width), mode='bicubic', align_corners=True)
         mask[mask < mask_threshold] = 0
@@ -189,6 +188,6 @@ for i,batch in enumerate(train_dataloader):
                 scores=[item["score"] for item in preds]
                 raw_img=unnormalize(batch["img"], *cfg["data"]["train"]["pipeline"]["normalize"])
                 vis_img=vis_masks(raw_img.copy(),masks,bboxes,scores)
-                print(raw_img.shape)
+                #print(raw_img.shape)
                 #cv2.imwrite("kk.png",raw_img)
-                cv2.imwrite(f"vis_results/v2_vis{i}.png",vis_img)
+                cv2.imwrite(f"vis_results/vis{i}.png",vis_img)
