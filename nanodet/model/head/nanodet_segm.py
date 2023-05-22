@@ -295,7 +295,9 @@ class NanoDetSegmHead(GFLHead):
                 det_result[i] = [{
                     'bbox': bbox[:4].astype(np.float32).tolist(), 
                     'score': float(bbox[4]), 
-                    'mask': mask.tolist()
+                    'mask': mask.tolist(),
+                    'height': img_height,
+                    'width': img_width
                 } for ind, bbox,mask in zip(inds, det_bboxes,masks) if ind]
             det_results[img_id] = det_result
         return det_results

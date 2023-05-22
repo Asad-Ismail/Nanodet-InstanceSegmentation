@@ -14,6 +14,7 @@
 import copy
 
 from .coco_detection import CocoDetectionEvaluator
+from .coco_detection import CocoSegmentationEvaluator
 
 
 def build_evaluator(cfg, dataset):

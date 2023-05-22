@@ -24,6 +24,8 @@ import warnings
 import numpy as np
 from pycocotools.cocoeval import COCOeval
 from tabulate import tabulate
+import torch.nn.functional as F
+import pycocotools.mask as mask_util
 
 logger = logging.getLogger("NanoDet")
 
@@ -157,25 +159,43 @@ class CocoSegmentationEvaluator:
         self.cat_ids = dataset.cat_ids
         self.metric_names = ["mAP", "AP_50", "AP_75", "AP_small", "AP_m", "AP_l"]
 
+
     def results2json(self, results):
         """
-        results: {image_id: {label: [bboxes...] } }
+        results: {image_id: {label: [detections...] } }
         :return coco json format: {image_id:
                                    category_id:
                                    bbox:
                                    score: }
         """
         json_results = []
+        mask_threshold=0.3
         for image_id, dets in results.items():
-            for label, bboxes in dets.items():
+            for label, rslts in dets.items():
                 category_id = self.cat_ids[label]
-                for bbox in bboxes:
-                    score = float(bbox[4])
+                for rslt in rslts:
+                    score = float(rslt["score"])
+                    mask= rslt["mask"]
+                    height, width = mask.shape
+
+                    # Resize mask
+                    mask = torch.from_numpy(mask).float().unsqueeze(0)
+                    mask = F.interpolate(mask, size=(height, width), mode='bicubic', align_corners=True)
+                    mask[mask < mask_threshold] = 0
+                    binary_mask = mask > 0
+
+                    # Convert mask to COCO RLE format
+                    binary_mask_np = binary_mask.squeeze().cpu().numpy()
+                    rle = mask_util.encode(np.asarray(binary_mask_np, order="F"))
+
+                    bbox=rslt["bbox"]
+
                     detection = dict(
                         image_id=int(image_id),
                         category_id=int(category_id),
-                        bbox=xyxy2xywh(bbox),
+                        bbox=xyxy2xywh(bbox),  # Make sure this is in xywh format
                         score=score,
+                        segmentation=rle
                     )
                     json_results.append(detection)
         return json_results
@@ -196,45 +216,72 @@ class CocoSegmentationEvaluator:
         json_path = os.path.join(save_dir, "results{}.json".format(rank))
         json.dump(results_json, open(json_path, "w"))
         coco_dets = self.coco_api.loadRes(json_path)
+
+        # Evaluating bbox metrics
         coco_eval = COCOeval(
             copy.deepcopy(self.coco_api), copy.deepcopy(coco_dets), "bbox"
         )
         coco_eval.evaluate()
         coco_eval.accumulate()
 
+        # Evaluating segm metrics
+        coco_eval_segm = COCOeval(
+            copy.deepcopy(self.coco_api), copy.deepcopy(coco_dets), "segm"
+        )
+        coco_eval_segm.evaluate()
+        coco_eval_segm.accumulate()
+
         # use logger to log coco eval results
         redirect_string = io.StringIO()
         with contextlib.redirect_stdout(redirect_string):
             coco_eval.summarize()
+            coco_eval_segm.summarize()
         logger.info("\n" + redirect_string.getvalue())
 
         # print per class AP
-        headers = ["class", "AP50", "mAP"]
-        colums = 6
-        per_class_ap50s = []
-        per_class_maps = []
-        precisions = coco_eval.eval["precision"]
+        headers = ["class", "bbox_AP50", "bbox_mAP", "segm_AP50", "segm_mAP"]
+        columns = 6
+
+        per_class_bbox_ap50s = []
+        per_class_bbox_maps = []
+        per_class_segm_ap50s = []
+        per_class_segm_maps = []
+
+        precisions_bbox = coco_eval_bbox.eval["precision"]
+        precisions_segm = coco_eval_segm.eval["precision"]
+
         # dimension of precisions: [TxRxKxAxM]
         # precision has dims (iou, recall, cls, area range, max dets)
-        assert len(self.class_names) == precisions.shape[2]
+        assert len(self.class_names) == precisions_bbox.shape[2] == precisions_segm.shape[2]
 
         for idx, name in enumerate(self.class_names):
-            # area range index 0: all area ranges
-            # max dets index -1: typically 100 per image
-            precision_50 = precisions[0, :, idx, 0, -1]
-            precision_50 = precision_50[precision_50 > -1]
-            ap50 = np.mean(precision_50) if precision_50.size else float("nan")
-            per_class_ap50s.append(float(ap50 * 100))
+            # BBOX metrics
+            precision_50_bbox = precisions_bbox[0, :, idx, 0, -1]
+            precision_50_bbox = precision_50_bbox[precision_50_bbox > -1]
+            ap50_bbox = np.mean(precision_50_bbox) if precision_50_bbox.size else float("nan")
+            per_class_bbox_ap50s.append(float(ap50_bbox * 100))
 
-            precision = precisions[:, :, idx, 0, -1]
-            precision = precision[precision > -1]
-            ap = np.mean(precision) if precision.size else float("nan")
-            per_class_maps.append(float(ap * 100))
+            precision_bbox = precisions_bbox[:, :, idx, 0, -1]
+            precision_bbox = precision_bbox[precision_bbox > -1]
+            ap_bbox = np.mean(precision_bbox) if precision_bbox.size else float("nan")
+            per_class_bbox_maps.append(float(ap_bbox * 100))
 
-        num_cols = min(colums, len(self.class_names) * len(headers))
+            # SEGM metrics
+            precision_50_segm = precisions_segm[0, :, idx, 0, -1]
+            precision_50_segm = precision_50_segm[precision_50_segm > -1]
+            ap50_segm = np.mean(precision_50_segm) if precision_50_segm.size else float("nan")
+            per_class_segm_ap50s.append(float(ap50_segm * 100))
+
+            precision_segm = precisions_segm[:, :, idx, 0, -1]
+            precision_segm = precision_segm[precision_segm > -1]
+            ap_segm = np.mean(precision_segm) if precision_segm.size else float("nan")
+            per_class_segm_maps.append(float(ap_segm * 100))
+
+        num_cols = min(columns, len(self.class_names) * len(headers))
         flatten_results = []
-        for name, ap50, mAP in zip(self.class_names, per_class_ap50s, per_class_maps):
-            flatten_results += [name, ap50, mAP]
+        for name, bbox_ap50, bbox_mAP, segm_ap50, segm_mAP in zip(
+            self.class_names, per_class_bbox_ap50s, per_class_bbox_maps, per_class_segm_ap50s, per_class_segm_maps):
+            flatten_results += [name, bbox_ap50, bbox_mAP, segm_ap50, segm_mAP]
 
         row_pair = itertools.zip_longest(
             *[flatten_results[i::num_cols] for i in range(num_cols)]
@@ -249,8 +296,12 @@ class CocoSegmentationEvaluator:
         )
         logger.info("\n" + table)
 
-        aps = coco_eval.stats[:6]
-        eval_results = {}
-        for k, v in zip(self.metric_names, aps):
-            eval_results[k] = v
+        # Return eval results for both bbox and segm
+        eval_results = {
+            metric: (bbox_stat, segm_stat)
+            for metric, bbox_stat, segm_stat in zip(
+                self.metric_names, coco_eval_bbox.stats[:6], coco_eval_segm.stats[:6])
+        }
+
         return eval_results
+
