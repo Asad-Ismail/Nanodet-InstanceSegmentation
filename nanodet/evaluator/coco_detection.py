@@ -190,7 +190,9 @@ class CocoSegmentationEvaluator:
         :return coco json format: {image_id:
                                    category_id:
                                    bbox:
-                                   score: }
+                                   score:
+                                   mask: 
+                                    }
         """
         json_results = []
         mask_threshold=0.3
