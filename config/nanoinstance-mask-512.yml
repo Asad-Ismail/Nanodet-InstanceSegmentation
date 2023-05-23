@@ -113,7 +113,7 @@ schedule:
   val_intervals: 10
 grad_clip: 35
 evaluator:
-  name: CocoDetectionEvaluator
+  name: CocoSegmentationEvaluator
   save_key: mAP
 log:
   interval: 2

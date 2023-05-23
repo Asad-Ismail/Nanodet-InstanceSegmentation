@@ -18,7 +18,6 @@ import cv2
 import numpy as np
 import torch
 from pycocotools.coco import COCO
-
 from .base import BaseDataset
 
 
@@ -141,6 +140,7 @@ class CocoDataset(BaseDataset):
         )
         if self.use_instance_mask:
             meta["gt_masks"] = ann["masks"]
+
         if self.use_keypoint:
             meta["gt_keypoints"] = ann["keypoints"]
 

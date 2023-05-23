@@ -12,6 +12,7 @@ import deeplake as hub
 import cv2
 import numpy as np
 from tqdm import tqdm
+import pycocotools.mask as mask_util
 
 from .coco import CocoDataset
 
@@ -65,7 +66,7 @@ class HubDataset(CocoDataset):
         ann_id = 1
         
         for i,d in tqdm(enumerate(self.ds)):
-            if (i>6):
+            if (i>0):
                 break
             image=d.images.numpy()
             image=cv2.resize(image,(self.img_sz,self.img_sz))
@@ -110,7 +111,9 @@ class HubDataset(CocoDataset):
                     "iscrowd": 0,
                     "id": ann_id,
                     "area": coco_box[2] * coco_box[3],
-                    "masks":mask
+                    "masks":mask,
+                    # required for coco eval :(
+                    "segmentation": mask_util.encode(np.asfortranarray(mask.astype(np.uint8)))
                 }
                 annotations.append(ann)
                 ann_id += 1

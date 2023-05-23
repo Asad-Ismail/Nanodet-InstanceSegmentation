@@ -14,6 +14,7 @@ import torch
 from nanodet.data.collate import naive_collate
 from nanodet.data.dataset import build_dataset
 from nanodet.model.arch import build_model
+from nanodet.evaluator import build_evaluator
 from nanodet.data.batch_process import stack_batch_img
 from nanodet.util import (
     cfg,
@@ -154,7 +155,7 @@ def vis_masks(img, masks, boxes,scores,mask_threshold=0.2, box_threshold=0.5):
         y_min, y_max = max(0, y_min), min(y_max+1, height)
 
         width, height = x_max - x_min, y_max - y_min
-        
+
         mask = mask.unsqueeze(0)
         mask = F.interpolate(mask, size=(height, width), mode='bicubic', align_corners=True)
         mask[mask < mask_threshold] = 0
@@ -178,9 +179,12 @@ def unnormalize(img, mean, std):
     return img
 
 
+evaluator = build_evaluator(cfg.evaluator,train_dataset)
+
 for i,batch in enumerate(train_dataloader):
     with torch.no_grad():
         predictions = task.predict(batch)
+        eval_results = evaluator.evaluate(predictions, cfg.save_dir)
         for k,v in predictions.items():
             for clas,preds in v.items():
                 bboxes=[item["bbox"] for item in preds]

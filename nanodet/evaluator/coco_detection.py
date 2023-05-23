@@ -25,7 +25,9 @@ import numpy as np
 from pycocotools.cocoeval import COCOeval
 from tabulate import tabulate
 import torch.nn.functional as F
+import torch
 import pycocotools.mask as mask_util
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger("NanoDet")
 
@@ -159,6 +161,28 @@ class CocoSegmentationEvaluator:
         self.cat_ids = dataset.cat_ids
         self.metric_names = ["mAP", "AP_50", "AP_75", "AP_small", "AP_m", "AP_l"]
 
+    def interpolate_masks(self,box,mask,height,width,mask_threshold=0.3):
+        # where we will paste the mask
+        img = np.zeros((height,width), dtype=np.bool)
+        x_min, y_min, x_max, y_max = box
+        x_min, y_min, x_max, y_max = map(int, [x_min, y_min, x_max, y_max])
+
+        x_min, x_max = max(0, x_min), min(x_max+1, width)
+        y_min, y_max = max(0, y_min), min(y_max+1, height)
+
+        width, height = x_max - x_min, y_max - y_min
+
+        mask = torch.from_numpy(mask).unsqueeze(0)
+        mask = F.interpolate(mask, size=(height, width), mode='bicubic', align_corners=True)
+        mask[mask < mask_threshold] = 0
+        binary_mask = mask > 0
+        binary_mask_np=binary_mask.squeeze().squeeze().cpu().numpy()
+        binary_mask_np = binary_mask_np.astype(np.bool)
+        ## set binary mask in original image
+        img[y_min:y_max, x_min:x_max][binary_mask_np] = True
+
+        return img
+    
 
     def results2json(self, results):
         """
@@ -173,22 +197,29 @@ class CocoSegmentationEvaluator:
         for image_id, dets in results.items():
             for label, rslts in dets.items():
                 category_id = self.cat_ids[label]
-                for rslt in rslts:
+                for i,rslt in enumerate(rslts):
                     score = float(rslt["score"])
-                    mask= rslt["mask"]
-                    height, width = mask.shape
-
-                    # Resize mask
-                    mask = torch.from_numpy(mask).float().unsqueeze(0)
-                    mask = F.interpolate(mask, size=(height, width), mode='bicubic', align_corners=True)
-                    mask[mask < mask_threshold] = 0
-                    binary_mask = mask > 0
-
-                    # Convert mask to COCO RLE format
-                    binary_mask_np = binary_mask.squeeze().cpu().numpy()
-                    rle = mask_util.encode(np.asarray(binary_mask_np, order="F"))
-
+                    mask= np.array(rslt["mask"])
+                    height, width = rslt["height"],rslt["width"]
                     bbox=rslt["bbox"]
+                    # Interpolate interpolate to right region
+                    interp_mask=self.interpolate_masks(bbox,mask,height,width)
+                    # Convert mask to COCO RLE format
+                    rle = mask_util.encode(np.asfortranarray(interp_mask))
+                    # Decode the mask
+                    #decoded_mask = mask_util.decode(rle)
+                    # Check if the original and decoded masks are the same
+                    #assert np.all(interp_mask == decoded_mask)
+                    #plt.figure()
+                    #plt.imshow(interp_mask)
+                    #plt.title('Original Mask')
+                    #plt.savefig(f'original_mask{i}.png')
+                    #plt.imshow(decoded_mask)
+                    #plt.title('Decoded Mask')
+                    #plt.savefig('decoded_mask.png')
+
+                    # convert bytes to utf-8 string
+                    rle['counts'] = rle['counts'].decode('utf-8')
 
                     detection = dict(
                         image_id=int(image_id),
@@ -247,7 +278,7 @@ class CocoSegmentationEvaluator:
         per_class_segm_ap50s = []
         per_class_segm_maps = []
 
-        precisions_bbox = coco_eval_bbox.eval["precision"]
+        precisions_bbox = coco_eval.eval["precision"]
         precisions_segm = coco_eval_segm.eval["precision"]
 
         # dimension of precisions: [TxRxKxAxM]
@@ -283,9 +314,7 @@ class CocoSegmentationEvaluator:
             self.class_names, per_class_bbox_ap50s, per_class_bbox_maps, per_class_segm_ap50s, per_class_segm_maps):
             flatten_results += [name, bbox_ap50, bbox_mAP, segm_ap50, segm_mAP]
 
-        row_pair = itertools.zip_longest(
-            *[flatten_results[i::num_cols] for i in range(num_cols)]
-        )
+        row_pair = itertools.zip_longest(*[flatten_results[i::num_cols] for i in range(num_cols)])
         table_headers = headers * (num_cols // len(headers))
         table = tabulate(
             row_pair,
@@ -300,8 +329,10 @@ class CocoSegmentationEvaluator:
         eval_results = {
             metric: (bbox_stat, segm_stat)
             for metric, bbox_stat, segm_stat in zip(
-                self.metric_names, coco_eval_bbox.stats[:6], coco_eval_segm.stats[:6])
+                self.metric_names, coco_eval.stats[:6], coco_eval_segm.stats[:6])
         }
+
+        print(eval_results)
 
         return eval_results
 
