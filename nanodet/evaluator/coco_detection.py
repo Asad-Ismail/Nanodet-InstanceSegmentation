@@ -162,7 +162,7 @@ class CocoSegmentationEvaluator:
         self.metric_names = ["mAP", "AP_50", "AP_75", "AP_small", "AP_m", "AP_l"]
 
     def interpolate_masks(self,box,mask,height,width,mask_threshold=0.3):
-        # where we will paste the mask
+        #Interpolate and paste masks at right place
         img = np.zeros((height,width), dtype=np.bool)
         x_min, y_min, x_max, y_max = box
         x_min, y_min, x_max, y_max = map(int, [x_min, y_min, x_max, y_max])
@@ -176,7 +176,7 @@ class CocoSegmentationEvaluator:
         mask = F.interpolate(mask, size=(height, width), mode='bicubic', align_corners=True)
         mask[mask < mask_threshold] = 0
         binary_mask = mask > 0
-        binary_mask_np=binary_mask.squeeze().squeeze().cpu().numpy()
+        binary_mask_np=binary_mask.squeeze(0).squeeze(0).cpu().numpy()
         binary_mask_np = binary_mask_np.astype(np.bool)
         ## set binary mask in original image
         img[y_min:y_max, x_min:x_max][binary_mask_np] = True
@@ -196,31 +196,20 @@ class CocoSegmentationEvaluator:
         """
         json_results = []
         mask_threshold=0.3
+        #print(f"Original results keys(image ids) are {results.keys()}")
         for image_id, dets in results.items():
+            #print(f"Dets keys(cat ids) are {dets.keys()}")
             for label, rslts in dets.items():
                 category_id = self.cat_ids[label]
+                #print(f"Length for results list are {len(rslts)}")
                 for i,rslt in enumerate(rslts):
                     score = float(rslt["score"])
                     mask= np.array(rslt["mask"])
                     height, width = rslt["height"],rslt["width"]
                     bbox=rslt["bbox"]
-                    # Interpolate interpolate to right region
                     interp_mask=self.interpolate_masks(bbox,mask,height,width)
                     # Convert mask to COCO RLE format
                     rle = mask_util.encode(np.asfortranarray(interp_mask))
-                    # Decode the mask
-                    #decoded_mask = mask_util.decode(rle)
-                    # Check if the original and decoded masks are the same
-                    #assert np.all(interp_mask == decoded_mask)
-                    #plt.figure()
-                    #plt.imshow(interp_mask)
-                    #plt.title('Original Mask')
-                    #plt.savefig(f'original_mask{i}.png')
-                    #plt.imshow(decoded_mask)
-                    #plt.title('Decoded Mask')
-                    #plt.savefig('decoded_mask.png')
-
-                    # convert bytes to utf-8 string
                     rle['counts'] = rle['counts'].decode('utf-8')
 
                     detection = dict(
@@ -244,7 +233,8 @@ class CocoSegmentationEvaluator:
             )
             empty_eval_results = {}
             for key in self.metric_names:
-                empty_eval_results[key] = 0
+                empty_eval_results[f'{key}_bbox'] = 0
+                empty_eval_results[f'{key}_segm'] = 0
             return empty_eval_results
         json_path = os.path.join(save_dir, "results{}.json".format(rank))
         json.dump(results_json, open(json_path, "w"))
@@ -328,13 +318,13 @@ class CocoSegmentationEvaluator:
         logger.info("\n" + table)
 
         # Return eval results for both bbox and segm
-        eval_results = {
-            metric: (bbox_stat, segm_stat)
-            for metric, bbox_stat, segm_stat in zip(
-                self.metric_names, coco_eval.stats[:6], coco_eval_segm.stats[:6])
-        }
+        bbox_stats = coco_eval.stats[:6]
+        segm_stats = coco_eval_segm.stats[:6]
 
-        print(eval_results)
+        eval_results = {}
+        for metric, bbox_stat, segm_stat in zip(self.metric_names, bbox_stats, segm_stats):
+            eval_results[f'{metric}_bbox'] = bbox_stat
+            eval_results[f'{metric}_segm'] = segm_stat
 
         return eval_results
 

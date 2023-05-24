@@ -71,7 +71,7 @@ class OneStageDetectorSegmentor(nn.Module):
         # Add mask loss to loss dict
         loss+=mask_loss
         loss_states["MaskLoss"]=mask_loss
-        return preds, loss, loss_states
+        return preds,features,loss, loss_states
 
 
     def set_epoch(self, epoch):

@@ -91,8 +91,8 @@ data:
       normalize: [[103.53, 116.28, 123.675], [57.375, 57.12, 58.395]]
 device:
   gpu_ids: -1 # Set like [0, 1, 2, 3] if you have multi-GPUs
-  workers_per_gpu: 4
-  batchsize_per_gpu: 16
+  workers_per_gpu: 1
+  batchsize_per_gpu: 3
   precision: 32 # set to 16 to use AMP training
 schedule:
 #  resume:
@@ -114,7 +114,7 @@ schedule:
 grad_clip: 35
 evaluator:
   name: CocoSegmentationEvaluator
-  save_key: mAP
+  save_key: mAP_bbox
 log:
   interval: 2
 

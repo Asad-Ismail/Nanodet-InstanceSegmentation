@@ -237,7 +237,6 @@ class NanoDetSegmHead(GFLHead):
                 aligned_features = roi_align(features[feature_idx][i].unsqueeze(0), [boxes], output_size, spatial_scale=spatial_scale, sampling_ratio=-1)
                 pred_masks = self.seg_convs(aligned_features)
                 pred_masks = self.segm(pred_masks)
-
                 # Crop and resize the ground truth masks based on the predicted boxes
                 with torch.no_grad():
                     gt_resized_masks = self.crop_and_resize_masks(gt_masks[i], boxes, pred_masks.shape[-2:])
@@ -292,13 +291,23 @@ class NanoDetSegmHead(GFLHead):
             classes = det_labels.detach().cpu().numpy()
             for i in range(self.num_classes):
                 inds = classes == i
-                det_result[i] = [{
-                    'bbox': bbox[:4].astype(np.float32).tolist(), 
-                    'score': float(bbox[4]), 
-                    'mask': mask.tolist(),
-                    'height': img_height,
-                    'width': img_width
-                } for ind, bbox,mask in zip(inds, det_bboxes,masks) if ind]
+                det_lst=[]
+                for ind, bbox,mask in zip(inds, det_bboxes,masks):
+                    if ind:
+                        det_lst.append({
+                        'bbox': bbox[:4].astype(np.float32).tolist(), 
+                        'score': float(bbox[4]), 
+                        'mask': mask.tolist(),
+                        'height': img_height,
+                        'width': img_width})
+                det_result[i]=det_lst
+                #det_result[i] = [{
+                #    'bbox': bbox[:4].astype(np.float32).tolist(), 
+                #    'score': float(bbox[4]), 
+                #    'mask': mask.tolist(),
+                #    'height': img_height,
+                #    'width': img_width
+                #} for ind, bbox,mask in zip(inds, det_bboxes,masks) if ind]
             det_results[img_id] = det_result
         return det_results
 
