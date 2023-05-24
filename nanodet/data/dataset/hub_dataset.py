@@ -66,7 +66,7 @@ class HubDataset(CocoDataset):
         ann_id = 1
         
         for i,d in tqdm(enumerate(self.ds)):
-            if (i>6):
+            if (i>315):
                 break
             image=d.images.numpy()
             image=cv2.resize(image,(self.img_sz,self.img_sz))
