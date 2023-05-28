@@ -44,6 +44,8 @@ def main():
     # Run inference on PyTorch model
     torch_bbox, torch_msks, torch_labels, torch_scores = model(img_tensor)
 
+    print(f"Torch out shape is {torch_bbox.shape},{torch_msks.shape},{torch_labels.shape},{torch_scores.shape}")
+
     # Export model to ONNX
     torch.onnx.export(model,
                       img_tensor,
@@ -92,7 +94,8 @@ def main():
 
     if not np.allclose(torch_scores.detach().numpy(), onnx_scores, rtol=1e-03, atol=1e-05):
         print('Difference in scores: ', np.abs(torch_scores.detach().numpy() - onnx_scores).max())
-
+    
+    print(f"All tests succedded the conversion to ONNX was successful!!")
 
 if __name__ == "__main__":
     main()
