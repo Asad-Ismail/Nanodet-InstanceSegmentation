@@ -2,6 +2,44 @@ import torch
 from torchvision.ops import nms
 
 
+def multiclass_nms_onnx_friendly(multi_bboxes, multi_scores, score_thr, nms_thr, max_num=-1, score_factors=None):
+    num_classes = multi_scores.size(1)
+    # apply score threshold
+    scores_above_threshold = multi_scores > score_thr
+    results_bboxes, results_scores, results_labels = [], [], []
+    
+    for class_idx in range(num_classes):
+        # filter boxes of this class
+        class_scores = multi_scores[:, class_idx]
+        class_scores_above_threshold = scores_above_threshold[:, class_idx]
+        class_bboxes = multi_bboxes[class_scores_above_threshold]
+        class_scores = class_scores[class_scores_above_threshold]
+        
+        if score_factors is not None:
+            class_scores *= score_factors[class_scores_above_threshold]
+
+        # apply nms
+        keep = nms(class_bboxes, class_scores, nms_thr)
+        
+        # if max_num is specified, keep only max_num bboxes
+        if max_num > 0 and keep.shape[0] > max_num:
+            keep = keep[:max_num]
+
+        # collect results
+        results_bboxes.append(class_bboxes[keep])
+        results_scores.append(class_scores[keep])
+        results_labels.append(torch.full((len(keep), ), class_idx, dtype=torch.long))
+    
+    # concatenate results of all classes
+    final_boxes = torch.cat(results_bboxes, 0)
+    final_scores = torch.cat(results_scores)
+    final_labels = torch.cat(results_labels, 0)
+    final_boxes = torch.cat([final_boxes, final_scores.unsqueeze(-1)], 1)
+
+    return final_boxes, final_labels
+
+
+
 def multiclass_nms(
     multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, score_factors=None
 ):

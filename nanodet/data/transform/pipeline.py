@@ -53,7 +53,7 @@ class Pipeline:
         self.shape_transform = ShapeTransform(keep_ratio, **cfg)
         self.color = functools.partial(color_aug_and_norm, kwargs=cfg)
 
-    def __call__(self, dataset: Dataset, meta: Dict, dst_shape: Tuple[int, int]):
+    def __call__(self, meta: Dict, dst_shape: Tuple[int, int]):
         meta = self.shape_transform(meta, dst_shape=dst_shape)
         meta = self.color(meta=meta)
         return meta

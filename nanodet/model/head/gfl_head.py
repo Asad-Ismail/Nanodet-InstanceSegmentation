@@ -20,7 +20,7 @@ from ..loss.gfocal_loss import DistributionFocalLoss, QualityFocalLoss
 from ..loss.iou_loss import GIoULoss, bbox_overlaps
 from ..module.conv import ConvModule
 from ..module.init_weights import normal_init
-from ..module.nms import multiclass_nms
+from ..module.nms import multiclass_nms,multiclass_nms_onnx_friendly
 from ..module.scale import Scale
 from .assigner.atss_assigner import ATSSAssigner
 
@@ -47,9 +47,7 @@ class Integral(nn.Module):
     def __init__(self, reg_max=16):
         super(Integral, self).__init__()
         self.reg_max = reg_max
-        self.register_buffer(
-            "project", torch.linspace(0, self.reg_max, self.reg_max + 1)
-        )
+        self.register_buffer("project", torch.linspace(0, self.reg_max, self.reg_max + 1))
 
     def forward(self, x):
         """Forward feature from the regression head to get integral result of
@@ -61,9 +59,12 @@ class Integral(nn.Module):
             x (Tensor): Integral result of box locations, i.e., distance
                 offsets from the box center in four directions, shape (N, 4).
         """
+
         shape = x.size()
         x = F.softmax(x.reshape(*shape[:-1], 4, self.reg_max + 1), dim=-1)
-        x = F.linear(x, self.project.type_as(x)).reshape(*shape[:-1], 4)
+        # Linear does not work with onnx export chaning it to matmul
+        #x = F.linear(x, self.project.type_as(x)).reshape(*shape[:-1], 4)
+        x=torch.matmul(x, self.project.type_as(x)).reshape(*shape[:-1], 4)
         return x
 
 
@@ -573,6 +574,7 @@ class GFLHead(nn.Module):
         """
         device = cls_preds.device
         b = cls_preds.shape[0]
+        #input_height, input_width = img_metas["img"].shape[2:]
         input_height, input_width = img_metas["img"].shape[2:]
         input_shape = (input_height, input_width)
 
@@ -610,6 +612,53 @@ class GFLHead(nn.Module):
             )
             result_list.append(results)
         return result_list
+
+    def onnx_get_bboxes(self, cls_preds, reg_preds):
+        """Decode the outputs to bboxes.
+        Args:
+            cls_preds (Tensor): Shape (num_imgs, num_points, num_classes).
+            reg_preds (Tensor): Shape (num_imgs, num_points, 4 * (regmax + 1)).
+            img_metas (dict): Dict of image info.
+
+        Returns:
+            results_list (list[tuple]): List of detection bboxes and labels.
+        """
+        device = cls_preds.device
+        b = cls_preds.shape[0]
+        #input_height, input_width = img_metas["img"].shape[2:]
+        input_height, input_width = (512,512)
+        input_shape = (input_height, input_width)
+
+        featmap_sizes = [
+            (math.ceil(input_height / stride), math.ceil(input_width) / stride)
+            for stride in self.strides
+        ]
+        # get grid cells of one image
+        mlvl_center_priors = []
+        for i, stride in enumerate(self.strides):
+            y, x = self.get_single_level_center_point(
+                featmap_sizes[i], stride, torch.float32, device
+            )
+            strides = x.new_full((x.shape[0],), stride)
+            proiors = torch.stack([x, y, strides, strides], dim=-1)
+            mlvl_center_priors.append(proiors.unsqueeze(0).repeat(b, 1, 1))
+
+        center_priors = torch.cat(mlvl_center_priors, dim=1)
+        dis_preds = self.distribution_project(reg_preds) * center_priors[..., 2, None]
+        bboxes = distance2bbox(center_priors[..., :2], dis_preds, max_shape=input_shape)
+        scores = cls_preds.sigmoid()
+        # Assume we have one image for real time processing
+        score, bbox = scores[0], bboxes[0]
+        padding = score.new_zeros(score.shape[0], 1)
+        score = torch.cat([score, padding], dim=1)
+        results = multiclass_nms(
+                bbox,
+                score,
+                score_thr=0.1,
+                nms_cfg=dict(type="nms", iou_threshold=0.6),
+                max_num=100,
+            )
+        return results
 
     def get_single_level_center_point(
         self, featmap_size, stride, dtype, device, flatten=True
